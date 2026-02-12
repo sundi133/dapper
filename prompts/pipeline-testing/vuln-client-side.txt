@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "CLIENT_SIDE_ANALYSIS"
+- content: "Client-side analysis complete"
+
+- deliverable_type: "CLIENT_SIDE_QUEUE"
+- content: {"vulnerabilities": []}

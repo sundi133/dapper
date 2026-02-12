@@ -46,7 +46,7 @@ MODIFY the existing file `deliverables/comprehensive_security_assessment_report.
 ## Executive Summary
 - Target: {{WEB_URL}}
 - Assessment Date: {current date}
-- Scope: Authentication, XSS, SQL and Command Injection, SSRF, Authorization testing
+- Scope: Authentication, XSS, SQL and Command Injection, SSRF, Authorization, Web Attacks, Session/Auth, Business Logic, Client-Side testing
 
 ## Summary by Vulnerability Type
 
@@ -66,6 +66,30 @@ MODIFY the existing file `deliverables/comprehensive_security_assessment_report.
 
 **Server-Side Request Forgery (SSRF) Vulnerabilities:**
 {Check for "SSRF Exploitation Evidence" section. Include actually exploited vulnerabilities and those blocked by security controls. Exclude theoretical vulnerabilities requiring internal network access. If vulnerabilities exist, summarize their impact and severity. If section is missing or empty, state: "No SSRF vulnerabilities were found."}
+
+**Web Attacks Vulnerabilities:**
+{Check for "Web Attacks Exploitation Evidence" section. Include actually exploited vulnerabilities and those blocked by security controls. Exclude theoretical vulnerabilities requiring internal network access. If vulnerabilities exist, summarize their impact and severity. If section is missing or empty, state: "No web attacks vulnerabilities were found."}
+
+**Session & Authentication Vulnerabilities:**
+{Check for "Session & Auth Exploitation Evidence" section. Include actually exploited vulnerabilities and those blocked by security controls. Exclude theoretical vulnerabilities requiring internal network access. If vulnerabilities exist, summarize their impact and severity. If section is missing or empty, state: "No session/auth vulnerabilities were found."}
+
+**Business Logic Vulnerabilities:**
+{Check for "Business Logic Exploitation Evidence" section. Include actually exploited vulnerabilities and those blocked by security controls. Exclude theoretical vulnerabilities requiring internal network access. If vulnerabilities exist, summarize their impact and severity. If section is missing or empty, state: "No business logic vulnerabilities were found."}
+
+**Client-Side Vulnerabilities:**
+{Check for "Client-Side Exploitation Evidence" section. Include actually exploited vulnerabilities and those blocked by security controls. Exclude theoretical vulnerabilities requiring internal network access. If vulnerabilities exist, summarize their impact and severity. If section is missing or empty, state: "No client-side vulnerabilities were found."}
+
+## Threat Model Summary
+{Summarize the top objectives, attacker assumptions, and crown jewels from deliverables/threat_model_deliverable.md. Highlight 3-5 highest-priority abuse cases.}
+
+## Impact Analysis
+{Translate the most severe exploited findings into business impact. Focus on confidentiality, integrity, availability, and abuse of business processes.}
+
+## Remediation Guidance
+{List top remediation themes in priority order (short bullets).}
+
+## Lessons Learned
+{Provide 3-5 concise lessons learned from this engagement.}
 
 ## Network Reconnaissance
 {Extract security-relevant findings from automated scanning tools:
@@ -123,4 +147,3 @@ IMPORTANT: Do NOT reorder the existing exploitation evidence sections. Maintain 
 
 CRITICAL: You are modifying the existing concatenated report IN-PLACE, not creating a separate file.
 </instructions>
-

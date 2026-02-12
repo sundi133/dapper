@@ -15,6 +15,9 @@ export enum DeliverableType {
   // Pre-recon agent
   CODE_ANALYSIS = 'CODE_ANALYSIS',
 
+  // Threat modeling agent
+  THREAT_MODEL = 'THREAT_MODEL',
+
   // Recon agent
   RECON = 'RECON',
 
@@ -34,12 +37,30 @@ export enum DeliverableType {
   SSRF_ANALYSIS = 'SSRF_ANALYSIS',
   SSRF_QUEUE = 'SSRF_QUEUE',
 
+  WEB_ATTACKS_ANALYSIS = 'WEB_ATTACKS_ANALYSIS',
+  WEB_ATTACKS_QUEUE = 'WEB_ATTACKS_QUEUE',
+
+  SESSION_AUTH_ANALYSIS = 'SESSION_AUTH_ANALYSIS',
+  SESSION_AUTH_QUEUE = 'SESSION_AUTH_QUEUE',
+
+  BUSINESS_LOGIC_ANALYSIS = 'BUSINESS_LOGIC_ANALYSIS',
+  BUSINESS_LOGIC_QUEUE = 'BUSINESS_LOGIC_QUEUE',
+
+  CLIENT_SIDE_ANALYSIS = 'CLIENT_SIDE_ANALYSIS',
+  CLIENT_SIDE_QUEUE = 'CLIENT_SIDE_QUEUE',
+
+  WEB_HARDENING_ANALYSIS = 'WEB_HARDENING_ANALYSIS',
+
   // Exploitation agents
   INJECTION_EVIDENCE = 'INJECTION_EVIDENCE',
   XSS_EVIDENCE = 'XSS_EVIDENCE',
   AUTH_EVIDENCE = 'AUTH_EVIDENCE',
   AUTHZ_EVIDENCE = 'AUTHZ_EVIDENCE',
   SSRF_EVIDENCE = 'SSRF_EVIDENCE',
+  WEB_ATTACKS_EVIDENCE = 'WEB_ATTACKS_EVIDENCE',
+  SESSION_AUTH_EVIDENCE = 'SESSION_AUTH_EVIDENCE',
+  BUSINESS_LOGIC_EVIDENCE = 'BUSINESS_LOGIC_EVIDENCE',
+  CLIENT_SIDE_EVIDENCE = 'CLIENT_SIDE_EVIDENCE',
 }
 
 /**
@@ -48,6 +69,7 @@ export enum DeliverableType {
  */
 export const DELIVERABLE_FILENAMES: Record<DeliverableType, string> = {
   [DeliverableType.CODE_ANALYSIS]: 'code_analysis_deliverable.md',
+  [DeliverableType.THREAT_MODEL]: 'threat_model_deliverable.md',
   [DeliverableType.RECON]: 'recon_deliverable.md',
   [DeliverableType.INJECTION_ANALYSIS]: 'injection_analysis_deliverable.md',
   [DeliverableType.INJECTION_QUEUE]: 'injection_exploitation_queue.json',
@@ -59,11 +81,24 @@ export const DELIVERABLE_FILENAMES: Record<DeliverableType, string> = {
   [DeliverableType.AUTHZ_QUEUE]: 'authz_exploitation_queue.json',
   [DeliverableType.SSRF_ANALYSIS]: 'ssrf_analysis_deliverable.md',
   [DeliverableType.SSRF_QUEUE]: 'ssrf_exploitation_queue.json',
+  [DeliverableType.WEB_ATTACKS_ANALYSIS]: 'web_attacks_analysis_deliverable.md',
+  [DeliverableType.WEB_ATTACKS_QUEUE]: 'web_attacks_exploitation_queue.json',
+  [DeliverableType.SESSION_AUTH_ANALYSIS]: 'session_auth_analysis_deliverable.md',
+  [DeliverableType.SESSION_AUTH_QUEUE]: 'session_auth_exploitation_queue.json',
+  [DeliverableType.BUSINESS_LOGIC_ANALYSIS]: 'business_logic_analysis_deliverable.md',
+  [DeliverableType.BUSINESS_LOGIC_QUEUE]: 'business_logic_exploitation_queue.json',
+  [DeliverableType.CLIENT_SIDE_ANALYSIS]: 'client_side_analysis_deliverable.md',
+  [DeliverableType.CLIENT_SIDE_QUEUE]: 'client_side_exploitation_queue.json',
+  [DeliverableType.WEB_HARDENING_ANALYSIS]: 'web_hardening_analysis_deliverable.md',
   [DeliverableType.INJECTION_EVIDENCE]: 'injection_exploitation_evidence.md',
   [DeliverableType.XSS_EVIDENCE]: 'xss_exploitation_evidence.md',
   [DeliverableType.AUTH_EVIDENCE]: 'auth_exploitation_evidence.md',
   [DeliverableType.AUTHZ_EVIDENCE]: 'authz_exploitation_evidence.md',
   [DeliverableType.SSRF_EVIDENCE]: 'ssrf_exploitation_evidence.md',
+  [DeliverableType.WEB_ATTACKS_EVIDENCE]: 'web_attacks_exploitation_evidence.md',
+  [DeliverableType.SESSION_AUTH_EVIDENCE]: 'session_auth_exploitation_evidence.md',
+  [DeliverableType.BUSINESS_LOGIC_EVIDENCE]: 'business_logic_exploitation_evidence.md',
+  [DeliverableType.CLIENT_SIDE_EVIDENCE]: 'client_side_exploitation_evidence.md',
 };
 
 /**
@@ -75,6 +110,10 @@ export const QUEUE_TYPES: DeliverableType[] = [
   DeliverableType.AUTH_QUEUE,
   DeliverableType.AUTHZ_QUEUE,
   DeliverableType.SSRF_QUEUE,
+  DeliverableType.WEB_ATTACKS_QUEUE,
+  DeliverableType.SESSION_AUTH_QUEUE,
+  DeliverableType.BUSINESS_LOGIC_QUEUE,
+  DeliverableType.CLIENT_SIDE_QUEUE,
 ];
 
 /**

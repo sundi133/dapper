@@ -310,6 +310,10 @@ export async function runPreReconAgent(input: ActivityInput): Promise<AgentMetri
   return runAgentActivity('pre-recon', input);
 }
 
+export async function runThreatModelAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('threat-model', input);
+}
+
 export async function runReconAgent(input: ActivityInput): Promise<AgentMetrics> {
   return runAgentActivity('recon', input);
 }
@@ -334,6 +338,26 @@ export async function runAuthzVulnAgent(input: ActivityInput): Promise<AgentMetr
   return runAgentActivity('authz-vuln', input);
 }
 
+export async function runWebAttacksVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('web-attacks-vuln', input);
+}
+
+export async function runSessionAuthVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('session-auth-vuln', input);
+}
+
+export async function runBusinessLogicVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('business-logic-vuln', input);
+}
+
+export async function runClientSideVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('client-side-vuln', input);
+}
+
+export async function runWebHardeningAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('web-hardening', input);
+}
+
 export async function runInjectionExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
   return runAgentActivity('injection-exploit', input);
 }
@@ -352,6 +376,22 @@ export async function runSsrfExploitAgent(input: ActivityInput): Promise<AgentMe
 
 export async function runAuthzExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
   return runAgentActivity('authz-exploit', input);
+}
+
+export async function runWebAttacksExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('web-attacks-exploit', input);
+}
+
+export async function runSessionAuthExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('session-auth-exploit', input);
+}
+
+export async function runBusinessLogicExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('business-logic-exploit', input);
+}
+
+export async function runClientSideExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('client-side-exploit', input);
 }
 
 export async function runReportAgent(input: ActivityInput): Promise<AgentMetrics> {

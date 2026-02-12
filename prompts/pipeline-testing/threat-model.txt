@@ -1,0 +1,4 @@
+Use the save_deliverable MCP tool to create the deliverable:
+
+- deliverable_type: "THREAT_MODEL"
+- content: "Threat model complete"

@@ -37,23 +37,33 @@ export const MCP_AGENT_MAPPING: Record<PromptName, PlaywrightAgent> = Object.fre
   // NOTE: Pre-recon is pure code analysis and doesn't use browser automation,
   // but assigning MCP server anyway for consistency and future extensibility
   'pre-recon-code': 'playwright-agent1',
+  'threat-model': 'playwright-agent2',
 
   // Phase 2: Reconnaissance (actual prompt name is 'recon')
   recon: 'playwright-agent2',
 
-  // Phase 3: Vulnerability Analysis (5 parallel agents)
+  // Phase 3: Vulnerability Analysis (parallel agents)
   'vuln-injection': 'playwright-agent1',
   'vuln-xss': 'playwright-agent2',
   'vuln-auth': 'playwright-agent3',
   'vuln-ssrf': 'playwright-agent4',
   'vuln-authz': 'playwright-agent5',
+  'vuln-web-attacks': 'playwright-agent1',
+  'vuln-session-auth': 'playwright-agent2',
+  'vuln-business-logic': 'playwright-agent3',
+  'vuln-client-side': 'playwright-agent4',
+  'vuln-web-hardening': 'playwright-agent5',
 
-  // Phase 4: Exploitation (5 parallel agents - same as vuln counterparts)
+  // Phase 4: Exploitation (parallel agents - same as vuln counterparts)
   'exploit-injection': 'playwright-agent1',
   'exploit-xss': 'playwright-agent2',
   'exploit-auth': 'playwright-agent3',
   'exploit-ssrf': 'playwright-agent4',
   'exploit-authz': 'playwright-agent5',
+  'exploit-web-attacks': 'playwright-agent1',
+  'exploit-session-auth': 'playwright-agent2',
+  'exploit-business-logic': 'playwright-agent3',
+  'exploit-client-side': 'playwright-agent4',
 
   // Phase 5: Reporting (actual prompt name is 'report-executive')
   // NOTE: Report generation is typically text-based and doesn't use browser automation,
@@ -68,6 +78,10 @@ export const AGENT_VALIDATORS: Record<AgentName, AgentValidator> = Object.freeze
     const codeAnalysisFile = path.join(sourceDir, 'deliverables', 'code_analysis_deliverable.md');
     return await fs.pathExists(codeAnalysisFile);
   },
+  'threat-model': async (sourceDir: string): Promise<boolean> => {
+    const threatModelFile = path.join(sourceDir, 'deliverables', 'threat_model_deliverable.md');
+    return await fs.pathExists(threatModelFile);
+  },
 
   // Reconnaissance agent
   recon: async (sourceDir: string): Promise<boolean> => {
@@ -81,6 +95,18 @@ export const AGENT_VALIDATORS: Record<AgentName, AgentValidator> = Object.freeze
   'auth-vuln': createVulnValidator('auth'),
   'ssrf-vuln': createVulnValidator('ssrf'),
   'authz-vuln': createVulnValidator('authz'),
+  'web-attacks-vuln': createVulnValidator('web-attacks'),
+  'session-auth-vuln': createVulnValidator('session-auth'),
+  'business-logic-vuln': createVulnValidator('business-logic'),
+  'client-side-vuln': createVulnValidator('client-side'),
+  'web-hardening': async (sourceDir: string): Promise<boolean> => {
+    const deliverableFile = path.join(
+      sourceDir,
+      'deliverables',
+      'web_hardening_analysis_deliverable.md'
+    );
+    return await fs.pathExists(deliverableFile);
+  },
 
   // Exploitation agents
   'injection-exploit': createExploitValidator('injection'),
@@ -88,6 +114,10 @@ export const AGENT_VALIDATORS: Record<AgentName, AgentValidator> = Object.freeze
   'auth-exploit': createExploitValidator('auth'),
   'ssrf-exploit': createExploitValidator('ssrf'),
   'authz-exploit': createExploitValidator('authz'),
+  'web-attacks-exploit': createExploitValidator('web-attacks'),
+  'session-auth-exploit': createExploitValidator('session-auth'),
+  'business-logic-exploit': createExploitValidator('business-logic'),
+  'client-side-exploit': createExploitValidator('client-side'),
 
   // Executive report agent
   report: async (sourceDir: string): Promise<boolean> => {

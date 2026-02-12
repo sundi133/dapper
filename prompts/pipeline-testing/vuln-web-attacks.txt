@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "WEB_ATTACKS_ANALYSIS"
+- content: "Web attacks analysis complete"
+
+- deliverable_type: "WEB_ATTACKS_QUEUE"
+- content: {"vulnerabilities": []}

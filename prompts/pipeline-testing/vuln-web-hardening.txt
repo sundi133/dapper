@@ -1,0 +1,4 @@
+Use the save_deliverable MCP tool to create the deliverable:
+
+- deliverable_type: "WEB_HARDENING_ANALYSIS"
+- content: "Web hardening analysis complete"

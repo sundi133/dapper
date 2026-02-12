@@ -76,11 +76,20 @@ export function getAgentPrefix(description: string): string {
     'auth-vuln': '[Auth]',
     'authz-vuln': '[Authz]',
     'ssrf-vuln': '[SSRF]',
+    'web-attacks-vuln': '[WebAttacks]',
+    'session-auth-vuln': '[SessionAuth]',
+    'business-logic-vuln': '[BusinessLogic]',
+    'client-side-vuln': '[ClientSide]',
+    'web-hardening': '[Hardening]',
     'injection-exploit': '[Injection]',
     'xss-exploit': '[XSS]',
     'auth-exploit': '[Auth]',
     'authz-exploit': '[Authz]',
     'ssrf-exploit': '[SSRF]',
+    'web-attacks-exploit': '[WebAttacks]',
+    'session-auth-exploit': '[SessionAuth]',
+    'business-logic-exploit': '[BusinessLogic]',
+    'client-side-exploit': '[ClientSide]',
   };
 
   // First try to match by agent name directly
@@ -97,6 +106,11 @@ export function getAgentPrefix(description: string): string {
   if (description.includes('authz')) return '[Authz]'; // Check authz before auth
   if (description.includes('auth')) return '[Auth]';
   if (description.includes('ssrf')) return '[SSRF]';
+  if (description.includes('web attacks')) return '[WebAttacks]';
+  if (description.includes('session')) return '[SessionAuth]';
+  if (description.includes('business')) return '[BusinessLogic]';
+  if (description.includes('client')) return '[ClientSide]';
+  if (description.includes('hardening')) return '[Hardening]';
 
   return '[Agent]';
 }

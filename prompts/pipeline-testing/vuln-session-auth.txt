@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "SESSION_AUTH_ANALYSIS"
+- content: "Session/auth analysis complete"
+
+- deliverable_type: "SESSION_AUTH_QUEUE"
+- content: {"vulnerabilities": []}

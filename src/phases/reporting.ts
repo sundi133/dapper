@@ -17,11 +17,17 @@ interface DeliverableFile {
 // Pure function: Assemble final report from specialist deliverables
 export async function assembleFinalReport(sourceDir: string): Promise<string> {
   const deliverableFiles: DeliverableFile[] = [
+    { name: 'Threat Model', path: 'threat_model_deliverable.md', required: false },
     { name: 'Injection', path: 'injection_exploitation_evidence.md', required: false },
     { name: 'XSS', path: 'xss_exploitation_evidence.md', required: false },
     { name: 'Authentication', path: 'auth_exploitation_evidence.md', required: false },
     { name: 'SSRF', path: 'ssrf_exploitation_evidence.md', required: false },
-    { name: 'Authorization', path: 'authz_exploitation_evidence.md', required: false }
+    { name: 'Authorization', path: 'authz_exploitation_evidence.md', required: false },
+    { name: 'Web Attacks', path: 'web_attacks_exploitation_evidence.md', required: false },
+    { name: 'Session & Auth', path: 'session_auth_exploitation_evidence.md', required: false },
+    { name: 'Business Logic', path: 'business_logic_exploitation_evidence.md', required: false },
+    { name: 'Client-Side', path: 'client_side_exploitation_evidence.md', required: false },
+    { name: 'Web Hardening', path: 'web_hardening_analysis_deliverable.md', required: false }
   ];
 
   const sections: string[] = [];

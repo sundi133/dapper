@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build:mcp-server": "npm --prefix mcp-server run build",
+    "build": "npm run build:mcp-server && tsc",
     "temporal:server": "docker compose -f docker/docker-compose.temporal.yml up temporal -d",
     "temporal:server:stop": "docker compose -f docker/docker-compose.temporal.yml down",
     "temporal:worker": "node dist/temporal/worker.js",

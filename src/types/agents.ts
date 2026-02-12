@@ -10,32 +10,52 @@
 
 export type AgentName =
   | 'pre-recon'
+  | 'threat-model'
   | 'recon'
   | 'injection-vuln'
   | 'xss-vuln'
   | 'auth-vuln'
   | 'ssrf-vuln'
   | 'authz-vuln'
+  | 'web-attacks-vuln'
+  | 'session-auth-vuln'
+  | 'business-logic-vuln'
+  | 'client-side-vuln'
+  | 'web-hardening'
   | 'injection-exploit'
   | 'xss-exploit'
   | 'auth-exploit'
   | 'ssrf-exploit'
   | 'authz-exploit'
+  | 'web-attacks-exploit'
+  | 'session-auth-exploit'
+  | 'business-logic-exploit'
+  | 'client-side-exploit'
   | 'report';
 
 export type PromptName =
   | 'pre-recon-code'
+  | 'threat-model'
   | 'recon'
   | 'vuln-injection'
   | 'vuln-xss'
   | 'vuln-auth'
   | 'vuln-ssrf'
   | 'vuln-authz'
+  | 'vuln-web-attacks'
+  | 'vuln-session-auth'
+  | 'vuln-business-logic'
+  | 'vuln-client-side'
+  | 'vuln-web-hardening'
   | 'exploit-injection'
   | 'exploit-xss'
   | 'exploit-auth'
   | 'exploit-ssrf'
   | 'exploit-authz'
+  | 'exploit-web-attacks'
+  | 'exploit-session-auth'
+  | 'exploit-business-logic'
+  | 'exploit-client-side'
   | 'report-executive';
 
 export type PlaywrightAgent =
@@ -66,17 +86,27 @@ export interface AgentDefinition {
 export function getPromptNameForAgent(agentName: AgentName): PromptName {
   const mappings: Record<AgentName, PromptName> = {
     'pre-recon': 'pre-recon-code',
+    'threat-model': 'threat-model',
     'recon': 'recon',
     'injection-vuln': 'vuln-injection',
     'xss-vuln': 'vuln-xss',
     'auth-vuln': 'vuln-auth',
     'ssrf-vuln': 'vuln-ssrf',
     'authz-vuln': 'vuln-authz',
+    'web-attacks-vuln': 'vuln-web-attacks',
+    'session-auth-vuln': 'vuln-session-auth',
+    'business-logic-vuln': 'vuln-business-logic',
+    'client-side-vuln': 'vuln-client-side',
+    'web-hardening': 'vuln-web-hardening',
     'injection-exploit': 'exploit-injection',
     'xss-exploit': 'exploit-xss',
     'auth-exploit': 'exploit-auth',
     'ssrf-exploit': 'exploit-ssrf',
     'authz-exploit': 'exploit-authz',
+    'web-attacks-exploit': 'exploit-web-attacks',
+    'session-auth-exploit': 'exploit-session-auth',
+    'business-logic-exploit': 'exploit-business-logic',
+    'client-side-exploit': 'exploit-client-side',
     'report': 'report-executive',
   };
 

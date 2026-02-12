@@ -8,7 +8,16 @@ import { fs, path } from 'zx';
 import { PentestError } from './error-handling.js';
 import { asyncPipe } from './utils/functional.js';
 
-export type VulnType = 'injection' | 'xss' | 'auth' | 'ssrf' | 'authz';
+export type VulnType =
+  | 'injection'
+  | 'xss'
+  | 'auth'
+  | 'ssrf'
+  | 'authz'
+  | 'web-attacks'
+  | 'session-auth'
+  | 'business-logic'
+  | 'client-side';
 
 interface VulnTypeConfigItem {
   deliverable: string;
@@ -94,6 +103,22 @@ const VULN_TYPE_CONFIG: VulnTypeConfig = Object.freeze({
   authz: Object.freeze({
     deliverable: 'authz_analysis_deliverable.md',
     queue: 'authz_exploitation_queue.json',
+  }),
+  'web-attacks': Object.freeze({
+    deliverable: 'web_attacks_analysis_deliverable.md',
+    queue: 'web_attacks_exploitation_queue.json',
+  }),
+  'session-auth': Object.freeze({
+    deliverable: 'session_auth_analysis_deliverable.md',
+    queue: 'session_auth_exploitation_queue.json',
+  }),
+  'business-logic': Object.freeze({
+    deliverable: 'business_logic_analysis_deliverable.md',
+    queue: 'business_logic_exploitation_queue.json',
+  }),
+  'client-side': Object.freeze({
+    deliverable: 'client_side_analysis_deliverable.md',
+    queue: 'client_side_exploitation_queue.json',
   }),
 }) as VulnTypeConfig;
 

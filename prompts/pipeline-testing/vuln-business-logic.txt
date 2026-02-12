@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "BUSINESS_LOGIC_ANALYSIS"
+- content: "Business logic analysis complete"
+
+- deliverable_type: "BUSINESS_LOGIC_QUEUE"
+- content: {"vulnerabilities": []}

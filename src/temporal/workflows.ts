@@ -9,8 +9,9 @@
  *
  * Orchestrates the penetration testing workflow:
  * 1. Pre-Reconnaissance (sequential)
- * 2. Reconnaissance (sequential)
- * 3-4. Vulnerability + Exploitation (5 pipelined pairs in parallel)
+ * 2. Threat Modeling (sequential)
+ * 3. Reconnaissance (sequential)
+ * 4-5. Vulnerability + Exploitation (pipelined pairs in parallel)
  *      Each pair: vuln agent → queue check → conditional exploit
  *      No synchronization barrier - exploits start when their vuln finishes
  * 5. Reporting (sequential)
@@ -148,7 +149,15 @@ export async function pentestPipelineWorkflow(
     state.completedAgents.push('pre-recon');
     await a.logPhaseTransition(activityInput, 'pre-recon', 'complete');
 
-    // === Phase 2: Reconnaissance ===
+    // === Phase 2: Threat Modeling ===
+    state.currentPhase = 'pre-recon';
+    state.currentAgent = 'threat-model';
+    await a.logPhaseTransition(activityInput, 'pre-recon', 'start');
+    state.agentMetrics['threat-model'] = await a.runThreatModelAgent(activityInput);
+    state.completedAgents.push('threat-model');
+    await a.logPhaseTransition(activityInput, 'pre-recon', 'complete');
+
+    // === Phase 3: Reconnaissance ===
     state.currentPhase = 'recon';
     state.currentAgent = 'recon';
     await a.logPhaseTransition(activityInput, 'recon', 'start');
@@ -195,8 +204,9 @@ export async function pentestPipelineWorkflow(
       };
     }
 
-    // Run all 5 pipelines in parallel with graceful failure handling
+    // Run all pipelines in parallel with graceful failure handling
     // Promise.allSettled ensures other pipelines continue if one fails
+    const hardeningPromise = a.runWebHardeningAgent(activityInput);
     const pipelineResults = await Promise.allSettled([
       runVulnExploitPipeline(
         'injection',
@@ -223,7 +233,28 @@ export async function pentestPipelineWorkflow(
         () => a.runAuthzVulnAgent(activityInput),
         () => a.runAuthzExploitAgent(activityInput)
       ),
+      runVulnExploitPipeline(
+        'web-attacks',
+        () => a.runWebAttacksVulnAgent(activityInput),
+        () => a.runWebAttacksExploitAgent(activityInput)
+      ),
+      runVulnExploitPipeline(
+        'session-auth',
+        () => a.runSessionAuthVulnAgent(activityInput),
+        () => a.runSessionAuthExploitAgent(activityInput)
+      ),
+      runVulnExploitPipeline(
+        'business-logic',
+        () => a.runBusinessLogicVulnAgent(activityInput),
+        () => a.runBusinessLogicExploitAgent(activityInput)
+      ),
+      runVulnExploitPipeline(
+        'client-side',
+        () => a.runClientSideVulnAgent(activityInput),
+        () => a.runClientSideExploitAgent(activityInput)
+      ),
     ]);
+    const hardeningResult = await Promise.allSettled([hardeningPromise]);
 
     // Aggregate results from all pipelines
     const failedPipelines: string[] = [];
@@ -250,6 +281,13 @@ export async function pentestPipelineWorkflow(
             : String(result.reason);
         failedPipelines.push(errorMsg);
       }
+    }
+
+    if (hardeningResult[0]?.status === 'fulfilled') {
+      state.agentMetrics['web-hardening'] = hardeningResult[0].value;
+      state.completedAgents.push('web-hardening');
+    } else if (hardeningResult[0]?.status === 'rejected') {
+      failedPipelines.push('web-hardening');
     }
 
     // Log any pipeline failures (workflow continues despite failures)
