@@ -253,6 +253,36 @@ export async function pentestPipelineWorkflow(
         () => a.runClientSideVulnAgent(activityInput),
         () => a.runClientSideExploitAgent(activityInput)
       ),
+      runVulnExploitPipeline(
+        'info-gathering',
+        () => a.runInfoGatheringVulnAgent(activityInput),
+        () => a.runInfoGatheringExploitAgent(activityInput)
+      ),
+      runVulnExploitPipeline(
+        'config-deploy',
+        () => a.runConfigDeployVulnAgent(activityInput),
+        () => a.runConfigDeployExploitAgent(activityInput)
+      ),
+      runVulnExploitPipeline(
+        'session-mgmt',
+        () => a.runSessionMgmtVulnAgent(activityInput),
+        () => a.runSessionMgmtExploitAgent(activityInput)
+      ),
+      runVulnExploitPipeline(
+        'error-handling',
+        () => a.runErrorHandlingVulnAgent(activityInput),
+        () => a.runErrorHandlingExploitAgent(activityInput)
+      ),
+      runVulnExploitPipeline(
+        'crypto',
+        () => a.runCryptoVulnAgent(activityInput),
+        () => a.runCryptoExploitAgent(activityInput)
+      ),
+      runVulnExploitPipeline(
+        'api-testing',
+        () => a.runApiTestingVulnAgent(activityInput),
+        () => a.runApiTestingExploitAgent(activityInput)
+      ),
     ]);
     const hardeningResult = await Promise.allSettled([hardeningPromise]);
 

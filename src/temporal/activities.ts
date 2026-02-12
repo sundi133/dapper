@@ -358,6 +358,54 @@ export async function runWebHardeningAgent(input: ActivityInput): Promise<AgentM
   return runAgentActivity('web-hardening', input);
 }
 
+export async function runInfoGatheringVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('info-gathering-vuln', input);
+}
+
+export async function runConfigDeployVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('config-deploy-vuln', input);
+}
+
+export async function runSessionMgmtVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('session-mgmt-vuln', input);
+}
+
+export async function runErrorHandlingVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('error-handling-vuln', input);
+}
+
+export async function runCryptoVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('crypto-vuln', input);
+}
+
+export async function runApiTestingVulnAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('api-testing-vuln', input);
+}
+
+export async function runInfoGatheringExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('info-gathering-exploit', input);
+}
+
+export async function runConfigDeployExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('config-deploy-exploit', input);
+}
+
+export async function runSessionMgmtExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('session-mgmt-exploit', input);
+}
+
+export async function runErrorHandlingExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('error-handling-exploit', input);
+}
+
+export async function runCryptoExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('crypto-exploit', input);
+}
+
+export async function runApiTestingExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
+  return runAgentActivity('api-testing-exploit', input);
+}
+
 export async function runInjectionExploitAgent(input: ActivityInput): Promise<AgentMetrics> {
   return runAgentActivity('injection-exploit', input);
 }

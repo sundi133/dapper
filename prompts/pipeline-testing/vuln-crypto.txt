@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "CRYPTO_ANALYSIS"
+- content: "Crypto analysis complete"
+
+- deliverable_type: "CRYPTO_QUEUE"
+- content: {"vulnerabilities": []}

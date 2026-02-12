@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "CONFIG_DEPLOY_ANALYSIS"
+- content: "Config/deploy analysis complete"
+
+- deliverable_type: "CONFIG_DEPLOY_QUEUE"
+- content: {"vulnerabilities": []}

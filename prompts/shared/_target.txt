@@ -1,1 +1,11 @@
-URL: {{WEB_URL}}
+Primary URL: {{WEB_URL}}
+Additional Targets:
+{{ADDITIONAL_TARGETS}}
+Accounts:
+{{ACCOUNTS}}
+Seed Data:
+{{SEED_DATA}}
+Exploration Limits:
+{{EXPLORATION_LIMITS}}
+API Schemas:
+{{API_SCHEMAS}}

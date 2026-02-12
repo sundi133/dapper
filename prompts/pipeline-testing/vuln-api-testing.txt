@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "API_TESTING_ANALYSIS"
+- content: "API testing analysis complete"
+
+- deliverable_type: "API_TESTING_QUEUE"
+- content: {"vulnerabilities": []}

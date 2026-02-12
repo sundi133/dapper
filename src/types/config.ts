@@ -53,11 +53,50 @@ export interface Authentication {
 export interface Config {
   rules?: Rules;
   authentication?: Authentication;
+  coverage?: CoverageConfig;
+  targets?: string[];
+  accounts?: Account[];
+  seed_data?: string[];
+  exploration?: ExplorationConfig;
+  schemas?: SchemaConfig;
   login?: unknown; // Deprecated
+}
+
+export interface Account {
+  role: string;
+  username: string;
+  password: string;
+  totp_secret?: string;
+}
+
+export interface CoverageConfig {
+  mode?: 'precision' | 'coverage';
+  include_potential?: boolean;
+  include_headers_tls?: boolean;
+  include_sast_sca?: boolean;
+  max_findings?: number;
+}
+
+export interface ExplorationConfig {
+  max_depth?: number;
+  max_requests?: number;
+  recon_minutes?: number;
+  exploit_minutes?: number;
+}
+
+export interface SchemaConfig {
+  openapi_urls?: string[];
+  graphql_endpoints?: string[];
 }
 
 export interface DistributedConfig {
   avoid: Rule[];
   focus: Rule[];
   authentication: Authentication | null;
+  coverage: CoverageConfig;
+  targets: string[];
+  accounts: Account[];
+  seed_data: string[];
+  exploration: ExplorationConfig;
+  schemas: SchemaConfig;
 }

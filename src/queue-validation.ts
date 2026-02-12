@@ -17,7 +17,13 @@ export type VulnType =
   | 'web-attacks'
   | 'session-auth'
   | 'business-logic'
-  | 'client-side';
+  | 'client-side'
+  | 'info-gathering'
+  | 'config-deploy'
+  | 'session-mgmt'
+  | 'error-handling'
+  | 'crypto'
+  | 'api-testing';
 
 interface VulnTypeConfigItem {
   deliverable: string;
@@ -119,6 +125,30 @@ const VULN_TYPE_CONFIG: VulnTypeConfig = Object.freeze({
   'client-side': Object.freeze({
     deliverable: 'client_side_analysis_deliverable.md',
     queue: 'client_side_exploitation_queue.json',
+  }),
+  'info-gathering': Object.freeze({
+    deliverable: 'info_gathering_analysis_deliverable.md',
+    queue: 'info_gathering_exploitation_queue.json',
+  }),
+  'config-deploy': Object.freeze({
+    deliverable: 'config_deploy_analysis_deliverable.md',
+    queue: 'config_deploy_exploitation_queue.json',
+  }),
+  'session-mgmt': Object.freeze({
+    deliverable: 'session_mgmt_analysis_deliverable.md',
+    queue: 'session_mgmt_exploitation_queue.json',
+  }),
+  'error-handling': Object.freeze({
+    deliverable: 'error_handling_analysis_deliverable.md',
+    queue: 'error_handling_exploitation_queue.json',
+  }),
+  crypto: Object.freeze({
+    deliverable: 'crypto_analysis_deliverable.md',
+    queue: 'crypto_exploitation_queue.json',
+  }),
+  'api-testing': Object.freeze({
+    deliverable: 'api_testing_analysis_deliverable.md',
+    queue: 'api_testing_exploitation_queue.json',
   }),
 }) as VulnTypeConfig;
 

@@ -50,6 +50,18 @@ export enum DeliverableType {
   CLIENT_SIDE_QUEUE = 'CLIENT_SIDE_QUEUE',
 
   WEB_HARDENING_ANALYSIS = 'WEB_HARDENING_ANALYSIS',
+  INFO_GATHERING_ANALYSIS = 'INFO_GATHERING_ANALYSIS',
+  CONFIG_DEPLOY_ANALYSIS = 'CONFIG_DEPLOY_ANALYSIS',
+  SESSION_MGMT_ANALYSIS = 'SESSION_MGMT_ANALYSIS',
+  ERROR_HANDLING_ANALYSIS = 'ERROR_HANDLING_ANALYSIS',
+  CRYPTO_ANALYSIS = 'CRYPTO_ANALYSIS',
+  API_TESTING_ANALYSIS = 'API_TESTING_ANALYSIS',
+  INFO_GATHERING_QUEUE = 'INFO_GATHERING_QUEUE',
+  CONFIG_DEPLOY_QUEUE = 'CONFIG_DEPLOY_QUEUE',
+  SESSION_MGMT_QUEUE = 'SESSION_MGMT_QUEUE',
+  ERROR_HANDLING_QUEUE = 'ERROR_HANDLING_QUEUE',
+  CRYPTO_QUEUE = 'CRYPTO_QUEUE',
+  API_TESTING_QUEUE = 'API_TESTING_QUEUE',
 
   // Exploitation agents
   INJECTION_EVIDENCE = 'INJECTION_EVIDENCE',
@@ -61,6 +73,12 @@ export enum DeliverableType {
   SESSION_AUTH_EVIDENCE = 'SESSION_AUTH_EVIDENCE',
   BUSINESS_LOGIC_EVIDENCE = 'BUSINESS_LOGIC_EVIDENCE',
   CLIENT_SIDE_EVIDENCE = 'CLIENT_SIDE_EVIDENCE',
+  INFO_GATHERING_EVIDENCE = 'INFO_GATHERING_EVIDENCE',
+  CONFIG_DEPLOY_EVIDENCE = 'CONFIG_DEPLOY_EVIDENCE',
+  SESSION_MGMT_EVIDENCE = 'SESSION_MGMT_EVIDENCE',
+  ERROR_HANDLING_EVIDENCE = 'ERROR_HANDLING_EVIDENCE',
+  CRYPTO_EVIDENCE = 'CRYPTO_EVIDENCE',
+  API_TESTING_EVIDENCE = 'API_TESTING_EVIDENCE',
 }
 
 /**
@@ -90,6 +108,18 @@ export const DELIVERABLE_FILENAMES: Record<DeliverableType, string> = {
   [DeliverableType.CLIENT_SIDE_ANALYSIS]: 'client_side_analysis_deliverable.md',
   [DeliverableType.CLIENT_SIDE_QUEUE]: 'client_side_exploitation_queue.json',
   [DeliverableType.WEB_HARDENING_ANALYSIS]: 'web_hardening_analysis_deliverable.md',
+  [DeliverableType.INFO_GATHERING_ANALYSIS]: 'info_gathering_analysis_deliverable.md',
+  [DeliverableType.CONFIG_DEPLOY_ANALYSIS]: 'config_deploy_analysis_deliverable.md',
+  [DeliverableType.SESSION_MGMT_ANALYSIS]: 'session_mgmt_analysis_deliverable.md',
+  [DeliverableType.ERROR_HANDLING_ANALYSIS]: 'error_handling_analysis_deliverable.md',
+  [DeliverableType.CRYPTO_ANALYSIS]: 'crypto_analysis_deliverable.md',
+  [DeliverableType.API_TESTING_ANALYSIS]: 'api_testing_analysis_deliverable.md',
+  [DeliverableType.INFO_GATHERING_QUEUE]: 'info_gathering_exploitation_queue.json',
+  [DeliverableType.CONFIG_DEPLOY_QUEUE]: 'config_deploy_exploitation_queue.json',
+  [DeliverableType.SESSION_MGMT_QUEUE]: 'session_mgmt_exploitation_queue.json',
+  [DeliverableType.ERROR_HANDLING_QUEUE]: 'error_handling_exploitation_queue.json',
+  [DeliverableType.CRYPTO_QUEUE]: 'crypto_exploitation_queue.json',
+  [DeliverableType.API_TESTING_QUEUE]: 'api_testing_exploitation_queue.json',
   [DeliverableType.INJECTION_EVIDENCE]: 'injection_exploitation_evidence.md',
   [DeliverableType.XSS_EVIDENCE]: 'xss_exploitation_evidence.md',
   [DeliverableType.AUTH_EVIDENCE]: 'auth_exploitation_evidence.md',
@@ -99,6 +129,12 @@ export const DELIVERABLE_FILENAMES: Record<DeliverableType, string> = {
   [DeliverableType.SESSION_AUTH_EVIDENCE]: 'session_auth_exploitation_evidence.md',
   [DeliverableType.BUSINESS_LOGIC_EVIDENCE]: 'business_logic_exploitation_evidence.md',
   [DeliverableType.CLIENT_SIDE_EVIDENCE]: 'client_side_exploitation_evidence.md',
+  [DeliverableType.INFO_GATHERING_EVIDENCE]: 'info_gathering_exploitation_evidence.md',
+  [DeliverableType.CONFIG_DEPLOY_EVIDENCE]: 'config_deploy_exploitation_evidence.md',
+  [DeliverableType.SESSION_MGMT_EVIDENCE]: 'session_mgmt_exploitation_evidence.md',
+  [DeliverableType.ERROR_HANDLING_EVIDENCE]: 'error_handling_exploitation_evidence.md',
+  [DeliverableType.CRYPTO_EVIDENCE]: 'crypto_exploitation_evidence.md',
+  [DeliverableType.API_TESTING_EVIDENCE]: 'api_testing_exploitation_evidence.md',
 };
 
 /**
@@ -114,6 +150,12 @@ export const QUEUE_TYPES: DeliverableType[] = [
   DeliverableType.SESSION_AUTH_QUEUE,
   DeliverableType.BUSINESS_LOGIC_QUEUE,
   DeliverableType.CLIENT_SIDE_QUEUE,
+  DeliverableType.INFO_GATHERING_QUEUE,
+  DeliverableType.CONFIG_DEPLOY_QUEUE,
+  DeliverableType.SESSION_MGMT_QUEUE,
+  DeliverableType.ERROR_HANDLING_QUEUE,
+  DeliverableType.CRYPTO_QUEUE,
+  DeliverableType.API_TESTING_QUEUE,
 ];
 
 /**

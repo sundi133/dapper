@@ -47,6 +47,7 @@ MODIFY the existing file `deliverables/comprehensive_security_assessment_report.
 - Target: {{WEB_URL}}
 - Assessment Date: {current date}
 - Scope: Authentication, XSS, SQL and Command Injection, SSRF, Authorization, Web Attacks, Session/Auth, Business Logic, Client-Side testing
+- Coverage Mode: {{COVERAGE_MODE}} ({{COVERAGE_POLICY}})
 
 ## Summary by Vulnerability Type
 
@@ -78,6 +79,24 @@ MODIFY the existing file `deliverables/comprehensive_security_assessment_report.
 
 **Client-Side Vulnerabilities:**
 {Check for "Client-Side Exploitation Evidence" section. Include actually exploited vulnerabilities and those blocked by security controls. Exclude theoretical vulnerabilities requiring internal network access. If vulnerabilities exist, summarize their impact and severity. If section is missing or empty, state: "No client-side vulnerabilities were found."}
+
+**Information Gathering Findings:**
+{Check for "Info Gathering Exploitation Evidence" section. Summarize exploited or blocked-by-security issues or state: "No information gathering issues were found."}
+
+**Configuration & Deployment Findings:**
+{Check for "Config & Deploy Exploitation Evidence" section. Summarize exploited or blocked-by-security issues or state: "No configuration/deployment issues were found."}
+
+**Session Management Findings:**
+{Check for "Session Management Exploitation Evidence" section. Summarize exploited or blocked-by-security issues or state: "No session management issues were found."}
+
+**Error Handling Findings:**
+{Check for "Error Handling Exploitation Evidence" section. Summarize exploited or blocked-by-security issues or state: "No error handling issues were found."}
+
+**Cryptography Findings:**
+{Check for "Cryptography Exploitation Evidence" section. Summarize exploited or blocked-by-security issues or state: "No cryptography issues were found."}
+
+**API Testing Findings:**
+{Check for "API Testing Exploitation Evidence" section. Summarize exploited or blocked-by-security issues or state: "No API issues were found."}
 
 ## Threat Model Summary
 {Summarize the top objectives, attacker assumptions, and crown jewels from deliverables/threat_model_deliverable.md. Highlight 3-5 highest-priority abuse cases.}
@@ -127,8 +146,9 @@ IMPORTANT: Do NOT reorder the existing exploitation evidence sections. Maintain 
      NOTE: these sections will contain vulnerability lists with IDs matching pattern `### [TYPE]-VULN-[NUMBER]`
      * `# [Type] Exploitation Evidence`
      * `## Successfully Exploited Vulnerabilities`
+     * `## Potential Vulnerabilities (Validation Blocked)` ONLY if Coverage Mode is `coverage`
    - REMOVE ANY OTHER SECTIONS (even if they contain vulnerability IDs), such as:
-     * `## Potential Vulnerabilities (Validation Blocked)` (All agents)
+     * `## Potential Vulnerabilities (Validation Blocked)` (All agents) when Coverage Mode is `precision`
      * Standalone "Recommendations" sections
      * "Conclusion" sections
      * "Summary" sections

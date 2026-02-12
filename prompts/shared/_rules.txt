@@ -1,2 +1,4 @@
 Rules to Avoid:
 {{RULES_AVOID}}
+Coverage Mode: {{COVERAGE_MODE}}
+Coverage Policy: {{COVERAGE_POLICY}}

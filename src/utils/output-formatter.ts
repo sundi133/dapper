@@ -81,6 +81,18 @@ export function getAgentPrefix(description: string): string {
     'business-logic-vuln': '[BusinessLogic]',
     'client-side-vuln': '[ClientSide]',
     'web-hardening': '[Hardening]',
+    'info-gathering-vuln': '[Info]',
+    'config-deploy-vuln': '[Config]',
+    'session-mgmt-vuln': '[Session]',
+    'error-handling-vuln': '[Error]',
+    'crypto-vuln': '[Crypto]',
+    'api-testing-vuln': '[API]',
+    'info-gathering-exploit': '[Info]',
+    'config-deploy-exploit': '[Config]',
+    'session-mgmt-exploit': '[Session]',
+    'error-handling-exploit': '[Error]',
+    'crypto-exploit': '[Crypto]',
+    'api-testing-exploit': '[API]',
     'injection-exploit': '[Injection]',
     'xss-exploit': '[XSS]',
     'auth-exploit': '[Auth]',
@@ -111,6 +123,11 @@ export function getAgentPrefix(description: string): string {
   if (description.includes('business')) return '[BusinessLogic]';
   if (description.includes('client')) return '[ClientSide]';
   if (description.includes('hardening')) return '[Hardening]';
+  if (description.includes('info')) return '[Info]';
+  if (description.includes('config')) return '[Config]';
+  if (description.includes('error')) return '[Error]';
+  if (description.includes('crypto')) return '[Crypto]';
+  if (description.includes('api')) return '[API]';
 
   return '[Agent]';
 }

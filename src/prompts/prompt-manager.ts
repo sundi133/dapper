@@ -179,11 +179,65 @@ async function interpolateVariables(
       } else {
         result = result.replace(/{{LOGIN_INSTRUCTIONS}}/g, '');
       }
+
+      // Inject coverage mode instructions (default to precision)
+      const coverageMode = config.coverage?.mode || 'precision';
+      const includePotential = config.coverage?.include_potential ?? (coverageMode === 'coverage');
+      const includeHeadersTls = config.coverage?.include_headers_tls ?? (coverageMode === 'coverage');
+      const includeSastSca = config.coverage?.include_sast_sca ?? (coverageMode === 'coverage');
+      const maxFindings = config.coverage?.max_findings;
+
+      const coveragePolicyParts = [
+        includePotential ? 'include potential (non-exploit-verified) findings' : 'exclude potential findings',
+        includeHeadersTls ? 'include header/TLS/HSTS checks' : 'exclude header/TLS/HSTS checks',
+        includeSastSca ? 'include SAST/SCA notes if observed' : 'exclude SAST/SCA notes',
+        typeof maxFindings === 'number' ? `cap findings at ${maxFindings}` : 'no findings cap',
+      ];
+
+      const additionalTargets =
+        config.targets && config.targets.length > 0 ? config.targets.map((t) => `- ${t}`).join('\n') : 'None';
+      const accounts =
+        config.accounts && config.accounts.length > 0
+          ? config.accounts.map((a) => `- ${a.role}: ${a.username}${a.totp_secret ? ' (TOTP)' : ''}`).join('\n')
+          : 'None';
+      const seedData =
+        config.seed_data && config.seed_data.length > 0 ? config.seed_data.map((s) => `- ${s}`).join('\n') : 'None';
+      const explorationLimits =
+        config.exploration && Object.keys(config.exploration).length > 0
+          ? `max_depth=${config.exploration.max_depth ?? 'n/a'}, max_requests=${config.exploration.max_requests ?? 'n/a'}, recon_minutes=${config.exploration.recon_minutes ?? 'n/a'}, exploit_minutes=${config.exploration.exploit_minutes ?? 'n/a'}`
+          : 'None';
+      const apiSchemas =
+        config.schemas && (config.schemas.openapi_urls?.length || config.schemas.graphql_endpoints?.length)
+          ? [
+              ...(config.schemas.openapi_urls?.map((u) => `- OpenAPI: ${u}`) ?? []),
+              ...(config.schemas.graphql_endpoints?.map((u) => `- GraphQL: ${u}`) ?? []),
+            ].join('\n')
+          : 'None';
+
+      result = result
+        .replace(/{{COVERAGE_MODE}}/g, coverageMode)
+        .replace(/{{COVERAGE_POLICY}}/g, coveragePolicyParts.join('; '))
+        .replace(/{{ADDITIONAL_TARGETS}}/g, additionalTargets)
+        .replace(/{{ACCOUNTS}}/g, accounts)
+        .replace(/{{SEED_DATA}}/g, seedData)
+        .replace(/{{EXPLORATION_LIMITS}}/g, explorationLimits)
+        .replace(/{{API_SCHEMAS}}/g, apiSchemas);
     } else {
       // Replace the entire rules section with a clean message when no config provided
       const cleanRulesSection = '<rules>\nNo specific rules or focus areas provided for this test.\n</rules>';
       result = result.replace(/<rules>[\s\S]*?<\/rules>/g, cleanRulesSection);
       result = result.replace(/{{LOGIN_INSTRUCTIONS}}/g, '');
+      result = result
+        .replace(/{{COVERAGE_MODE}}/g, 'precision')
+        .replace(
+          /{{COVERAGE_POLICY}}/g,
+          'exclude potential findings; exclude header/TLS/HSTS checks; exclude SAST/SCA notes; no findings cap'
+        )
+        .replace(/{{ADDITIONAL_TARGETS}}/g, 'None')
+        .replace(/{{ACCOUNTS}}/g, 'None')
+        .replace(/{{SEED_DATA}}/g, 'None')
+        .replace(/{{EXPLORATION_LIMITS}}/g, 'None')
+        .replace(/{{API_SCHEMAS}}/g, 'None');
     }
 
     // Validate that all placeholders have been replaced (excluding instructional text)

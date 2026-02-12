@@ -101,6 +101,100 @@
       },
       "additionalProperties": false
     },
+    "coverage": {
+      "type": "object",
+      "description": "Coverage mode controls breadth vs precision of findings",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["precision", "coverage"],
+          "description": "Precision reports only exploit-verified findings; coverage includes potential findings and misconfigurations"
+        },
+        "include_potential": {
+          "type": "boolean",
+          "description": "Include potential (non-exploit-verified) findings"
+        },
+        "include_headers_tls": {
+          "type": "boolean",
+          "description": "Include security header, TLS, and HSTS checks"
+        },
+        "include_sast_sca": {
+          "type": "boolean",
+          "description": "Include static code and dependency findings if available"
+        },
+        "max_findings": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "description": "Optional cap for total findings reported"
+        }
+      },
+      "additionalProperties": false
+    },
+    "targets": {
+      "type": "array",
+      "description": "Additional target entry points (subdomains, services, APIs) to include",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      },
+      "maxItems": 100
+    },
+    "accounts": {
+      "type": "array",
+      "description": "Additional test accounts with roles for richer authz coverage",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "username": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "password": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "totp_secret": { "type": "string", "pattern": "^[A-Za-z2-7]+=*$" }
+        },
+        "required": ["role", "username", "password"],
+        "additionalProperties": false
+      },
+      "maxItems": 50
+    },
+    "seed_data": {
+      "type": "array",
+      "description": "Seed data or setup instructions for richer workflows",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      },
+      "maxItems": 200
+    },
+    "exploration": {
+      "type": "object",
+      "description": "Exploration limits for deeper dynamic testing",
+      "properties": {
+        "max_depth": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "max_requests": { "type": "integer", "minimum": 100, "maximum": 100000 },
+        "recon_minutes": { "type": "integer", "minimum": 5, "maximum": 1440 },
+        "exploit_minutes": { "type": "integer", "minimum": 5, "maximum": 1440 }
+      },
+      "additionalProperties": false
+    },
+    "schemas": {
+      "type": "object",
+      "description": "API schema locations to expand dynamic coverage",
+      "properties": {
+        "openapi_urls": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "maxItems": 50
+        },
+        "graphql_endpoints": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "maxItems": 50
+        }
+      },
+      "additionalProperties": false
+    },
     "login": {
       "type": "object",
       "description": "Deprecated: Use 'authentication' section instead",

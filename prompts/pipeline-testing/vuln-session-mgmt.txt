@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "SESSION_MGMT_ANALYSIS"
+- content: "Session management analysis complete"
+
+- deliverable_type: "SESSION_MGMT_QUEUE"
+- content: {"vulnerabilities": []}

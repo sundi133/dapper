@@ -15,6 +15,10 @@ import type {
   Rule,
   Rules,
   Authentication,
+  Account,
+  CoverageConfig,
+  ExplorationConfig,
+  SchemaConfig,
   DistributedConfig,
 } from './types/config.js';
 
@@ -330,11 +334,23 @@ export const distributeConfig = (config: Config | null): DistributedConfig => {
   const avoid = config?.rules?.avoid || [];
   const focus = config?.rules?.focus || [];
   const authentication = config?.authentication || null;
+  const coverage = sanitizeCoverage(config?.coverage);
+  const targets = sanitizeTargets(config?.targets);
+  const accounts = sanitizeAccounts(config?.accounts);
+  const seedData = sanitizeSeedData(config?.seed_data);
+  const exploration = sanitizeExploration(config?.exploration);
+  const schemas = sanitizeSchemas(config?.schemas);
 
   return {
     avoid: avoid.map(sanitizeRule),
     focus: focus.map(sanitizeRule),
     authentication: authentication ? sanitizeAuthentication(authentication) : null,
+    coverage,
+    targets,
+    accounts,
+    seed_data: seedData,
+    exploration,
+    schemas,
   };
 };
 
@@ -353,5 +369,60 @@ const sanitizeAuthentication = (auth: Authentication): Authentication => {
       type: auth.success_condition.type.toLowerCase().trim() as Authentication['success_condition']['type'],
       value: auth.success_condition.value.trim(),
     },
+  };
+};
+
+const sanitizeCoverage = (coverage?: CoverageConfig): CoverageConfig => {
+  if (!coverage) {
+    return { mode: 'precision' };
+  }
+
+  const mode = ((coverage.mode || 'precision').toLowerCase().trim() as 'precision' | 'coverage');
+  return {
+    mode,
+    ...(coverage.include_potential !== undefined && { include_potential: coverage.include_potential }),
+    ...(coverage.include_headers_tls !== undefined && { include_headers_tls: coverage.include_headers_tls }),
+    ...(coverage.include_sast_sca !== undefined && { include_sast_sca: coverage.include_sast_sca }),
+    ...(coverage.max_findings !== undefined && { max_findings: coverage.max_findings }),
+  };
+};
+
+const sanitizeTargets = (targets?: string[]): string[] => {
+  if (!targets || targets.length === 0) return [];
+  return targets.map((target) => target.trim()).filter((target) => target.length > 0);
+};
+
+const sanitizeAccounts = (accounts?: Account[]): Account[] => {
+  if (!accounts || accounts.length === 0) return [];
+  return accounts.map((account) => ({
+    role: account.role.trim(),
+    username: account.username.trim(),
+    password: account.password,
+    ...(account.totp_secret && { totp_secret: account.totp_secret.trim() }),
+  }));
+};
+
+const sanitizeSeedData = (seedData?: string[]): string[] => {
+  if (!seedData || seedData.length === 0) return [];
+  return seedData.map((item) => item.trim()).filter((item) => item.length > 0);
+};
+
+const sanitizeExploration = (exploration?: ExplorationConfig): ExplorationConfig => {
+  if (!exploration) return {};
+  return {
+    ...(exploration.max_depth !== undefined && { max_depth: exploration.max_depth }),
+    ...(exploration.max_requests !== undefined && { max_requests: exploration.max_requests }),
+    ...(exploration.recon_minutes !== undefined && { recon_minutes: exploration.recon_minutes }),
+    ...(exploration.exploit_minutes !== undefined && { exploit_minutes: exploration.exploit_minutes }),
+  };
+};
+
+const sanitizeSchemas = (schemas?: SchemaConfig): SchemaConfig => {
+  if (!schemas) return {};
+  const openapiUrls = schemas.openapi_urls?.map((url) => url.trim()).filter(Boolean);
+  const graphqlEndpoints = schemas.graphql_endpoints?.map((url) => url.trim()).filter(Boolean);
+  return {
+    ...(openapiUrls && openapiUrls.length > 0 && { openapi_urls: openapiUrls }),
+    ...(graphqlEndpoints && graphqlEndpoints.length > 0 && { graphql_endpoints: graphqlEndpoints }),
   };
 };

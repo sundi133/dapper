@@ -53,7 +53,12 @@ export const MCP_AGENT_MAPPING: Record<PromptName, PlaywrightAgent> = Object.fre
   'vuln-business-logic': 'playwright-agent3',
   'vuln-client-side': 'playwright-agent4',
   'vuln-web-hardening': 'playwright-agent5',
-
+  'vuln-info-gathering': 'playwright-agent1',
+  'vuln-config-deploy': 'playwright-agent2',
+  'vuln-session-mgmt': 'playwright-agent3',
+  'vuln-error-handling': 'playwright-agent4',
+  'vuln-crypto': 'playwright-agent5',
+  'vuln-api-testing': 'playwright-agent1',
   // Phase 4: Exploitation (parallel agents - same as vuln counterparts)
   'exploit-injection': 'playwright-agent1',
   'exploit-xss': 'playwright-agent2',
@@ -64,6 +69,12 @@ export const MCP_AGENT_MAPPING: Record<PromptName, PlaywrightAgent> = Object.fre
   'exploit-session-auth': 'playwright-agent2',
   'exploit-business-logic': 'playwright-agent3',
   'exploit-client-side': 'playwright-agent4',
+  'exploit-info-gathering': 'playwright-agent1',
+  'exploit-config-deploy': 'playwright-agent2',
+  'exploit-session-mgmt': 'playwright-agent3',
+  'exploit-error-handling': 'playwright-agent4',
+  'exploit-crypto': 'playwright-agent5',
+  'exploit-api-testing': 'playwright-agent1',
 
   // Phase 5: Reporting (actual prompt name is 'report-executive')
   // NOTE: Report generation is typically text-based and doesn't use browser automation,
@@ -99,6 +110,12 @@ export const AGENT_VALIDATORS: Record<AgentName, AgentValidator> = Object.freeze
   'session-auth-vuln': createVulnValidator('session-auth'),
   'business-logic-vuln': createVulnValidator('business-logic'),
   'client-side-vuln': createVulnValidator('client-side'),
+  'info-gathering-vuln': createVulnValidator('info-gathering'),
+  'config-deploy-vuln': createVulnValidator('config-deploy'),
+  'session-mgmt-vuln': createVulnValidator('session-mgmt'),
+  'error-handling-vuln': createVulnValidator('error-handling'),
+  'crypto-vuln': createVulnValidator('crypto'),
+  'api-testing-vuln': createVulnValidator('api-testing'),
   'web-hardening': async (sourceDir: string): Promise<boolean> => {
     const deliverableFile = path.join(
       sourceDir,
@@ -107,6 +124,12 @@ export const AGENT_VALIDATORS: Record<AgentName, AgentValidator> = Object.freeze
     );
     return await fs.pathExists(deliverableFile);
   },
+  'info-gathering-exploit': createExploitValidator('info-gathering'),
+  'config-deploy-exploit': createExploitValidator('config-deploy'),
+  'session-mgmt-exploit': createExploitValidator('session-mgmt'),
+  'error-handling-exploit': createExploitValidator('error-handling'),
+  'crypto-exploit': createExploitValidator('crypto'),
+  'api-testing-exploit': createExploitValidator('api-testing'),
 
   // Exploitation agents
   'injection-exploit': createExploitValidator('injection'),

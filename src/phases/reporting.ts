@@ -27,7 +27,13 @@ export async function assembleFinalReport(sourceDir: string): Promise<string> {
     { name: 'Session & Auth', path: 'session_auth_exploitation_evidence.md', required: false },
     { name: 'Business Logic', path: 'business_logic_exploitation_evidence.md', required: false },
     { name: 'Client-Side', path: 'client_side_exploitation_evidence.md', required: false },
-    { name: 'Web Hardening', path: 'web_hardening_analysis_deliverable.md', required: false }
+    { name: 'Web Hardening', path: 'web_hardening_analysis_deliverable.md', required: false },
+    { name: 'Info Gathering', path: 'info_gathering_exploitation_evidence.md', required: false },
+    { name: 'Config & Deploy', path: 'config_deploy_exploitation_evidence.md', required: false },
+    { name: 'Session Management', path: 'session_mgmt_exploitation_evidence.md', required: false },
+    { name: 'Error Handling', path: 'error_handling_exploitation_evidence.md', required: false },
+    { name: 'Cryptography', path: 'crypto_exploitation_evidence.md', required: false },
+    { name: 'API Testing', path: 'api_testing_exploitation_evidence.md', required: false }
   ];
 
   const sections: string[] = [];

@@ -81,6 +81,66 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     displayName: 'Web hardening vuln agent',
     prerequisites: ['recon']
   },
+  'info-gathering-vuln': {
+    name: 'info-gathering-vuln',
+    displayName: 'Info gathering vuln agent',
+    prerequisites: ['recon']
+  },
+  'config-deploy-vuln': {
+    name: 'config-deploy-vuln',
+    displayName: 'Config/deploy vuln agent',
+    prerequisites: ['recon']
+  },
+  'session-mgmt-vuln': {
+    name: 'session-mgmt-vuln',
+    displayName: 'Session mgmt vuln agent',
+    prerequisites: ['recon']
+  },
+  'error-handling-vuln': {
+    name: 'error-handling-vuln',
+    displayName: 'Error handling vuln agent',
+    prerequisites: ['recon']
+  },
+  'crypto-vuln': {
+    name: 'crypto-vuln',
+    displayName: 'Crypto vuln agent',
+    prerequisites: ['recon']
+  },
+  'api-testing-vuln': {
+    name: 'api-testing-vuln',
+    displayName: 'API testing vuln agent',
+    prerequisites: ['recon']
+  },
+  'info-gathering-exploit': {
+    name: 'info-gathering-exploit',
+    displayName: 'Info gathering exploit agent',
+    prerequisites: ['info-gathering-vuln']
+  },
+  'config-deploy-exploit': {
+    name: 'config-deploy-exploit',
+    displayName: 'Config/deploy exploit agent',
+    prerequisites: ['config-deploy-vuln']
+  },
+  'session-mgmt-exploit': {
+    name: 'session-mgmt-exploit',
+    displayName: 'Session mgmt exploit agent',
+    prerequisites: ['session-mgmt-vuln']
+  },
+  'error-handling-exploit': {
+    name: 'error-handling-exploit',
+    displayName: 'Error handling exploit agent',
+    prerequisites: ['error-handling-vuln']
+  },
+  'crypto-exploit': {
+    name: 'crypto-exploit',
+    displayName: 'Crypto exploit agent',
+    prerequisites: ['crypto-vuln']
+  },
+  'api-testing-exploit': {
+    name: 'api-testing-exploit',
+    displayName: 'API testing exploit agent',
+    prerequisites: ['api-testing-vuln']
+  },
   'injection-exploit': {
     name: 'injection-exploit',
     displayName: 'Injection exploit agent',
@@ -139,7 +199,13 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
       'session-auth-exploit',
       'business-logic-exploit',
       'client-side-exploit',
-      'web-hardening'
+      'web-hardening',
+      'info-gathering-exploit',
+      'config-deploy-exploit',
+      'session-mgmt-exploit',
+      'error-handling-exploit',
+      'crypto-exploit',
+      'api-testing-exploit'
     ]
   }
 });
@@ -159,6 +225,12 @@ export const AGENT_ORDER: readonly AgentName[] = Object.freeze([
   'business-logic-vuln',
   'client-side-vuln',
   'web-hardening',
+  'info-gathering-vuln',
+  'config-deploy-vuln',
+  'session-mgmt-vuln',
+  'error-handling-vuln',
+  'crypto-vuln',
+  'api-testing-vuln',
   'injection-exploit',
   'xss-exploit',
   'auth-exploit',
@@ -168,6 +240,12 @@ export const AGENT_ORDER: readonly AgentName[] = Object.freeze([
   'session-auth-exploit',
   'business-logic-exploit',
   'client-side-exploit',
+  'info-gathering-exploit',
+  'config-deploy-exploit',
+  'session-mgmt-exploit',
+  'error-handling-exploit',
+  'crypto-exploit',
+  'api-testing-exploit',
   'report'
 ] as const);
 
@@ -183,7 +261,13 @@ export const getParallelGroups = (): Readonly<{ vuln: AgentName[]; exploit: Agen
     'session-auth-vuln',
     'business-logic-vuln',
     'client-side-vuln',
-    'web-hardening'
+    'web-hardening',
+    'info-gathering-vuln',
+    'config-deploy-vuln',
+    'session-mgmt-vuln',
+    'error-handling-vuln',
+    'crypto-vuln',
+    'api-testing-vuln'
   ],
   exploit: [
     'injection-exploit',
@@ -194,7 +278,13 @@ export const getParallelGroups = (): Readonly<{ vuln: AgentName[]; exploit: Agen
     'web-attacks-exploit',
     'session-auth-exploit',
     'business-logic-exploit',
-    'client-side-exploit'
+    'client-side-exploit',
+    'info-gathering-exploit',
+    'config-deploy-exploit',
+    'session-mgmt-exploit',
+    'error-handling-exploit',
+    'crypto-exploit',
+    'api-testing-exploit'
   ]
 });
 
@@ -216,6 +306,12 @@ export const AGENT_PHASE_MAP: Readonly<Record<AgentName, PhaseName>> = Object.fr
   'business-logic-vuln': 'vulnerability-analysis',
   'client-side-vuln': 'vulnerability-analysis',
   'web-hardening': 'vulnerability-analysis',
+  'info-gathering-vuln': 'vulnerability-analysis',
+  'config-deploy-vuln': 'vulnerability-analysis',
+  'session-mgmt-vuln': 'vulnerability-analysis',
+  'error-handling-vuln': 'vulnerability-analysis',
+  'crypto-vuln': 'vulnerability-analysis',
+  'api-testing-vuln': 'vulnerability-analysis',
   'injection-exploit': 'exploitation',
   'xss-exploit': 'exploitation',
   'auth-exploit': 'exploitation',
@@ -225,5 +321,11 @@ export const AGENT_PHASE_MAP: Readonly<Record<AgentName, PhaseName>> = Object.fr
   'session-auth-exploit': 'exploitation',
   'business-logic-exploit': 'exploitation',
   'client-side-exploit': 'exploitation',
+  'info-gathering-exploit': 'exploitation',
+  'config-deploy-exploit': 'exploitation',
+  'session-mgmt-exploit': 'exploitation',
+  'error-handling-exploit': 'exploitation',
+  'crypto-exploit': 'exploitation',
+  'api-testing-exploit': 'exploitation',
   'report': 'reporting',
 });

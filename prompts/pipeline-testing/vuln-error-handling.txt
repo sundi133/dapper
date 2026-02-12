@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "ERROR_HANDLING_ANALYSIS"
+- content: "Error handling analysis complete"
+
+- deliverable_type: "ERROR_HANDLING_QUEUE"
+- content: {"vulnerabilities": []}

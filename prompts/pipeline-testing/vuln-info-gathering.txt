@@ -1,0 +1,7 @@
+Use the save_deliverable MCP tool to create both deliverables:
+
+- deliverable_type: "INFO_GATHERING_ANALYSIS"
+- content: "Info gathering analysis complete"
+
+- deliverable_type: "INFO_GATHERING_QUEUE"
+- content: {"vulnerabilities": []}

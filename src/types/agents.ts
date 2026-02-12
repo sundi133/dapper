@@ -22,6 +22,18 @@ export type AgentName =
   | 'business-logic-vuln'
   | 'client-side-vuln'
   | 'web-hardening'
+  | 'info-gathering-vuln'
+  | 'config-deploy-vuln'
+  | 'session-mgmt-vuln'
+  | 'error-handling-vuln'
+  | 'crypto-vuln'
+  | 'api-testing-vuln'
+  | 'info-gathering-exploit'
+  | 'config-deploy-exploit'
+  | 'session-mgmt-exploit'
+  | 'error-handling-exploit'
+  | 'crypto-exploit'
+  | 'api-testing-exploit'
   | 'injection-exploit'
   | 'xss-exploit'
   | 'auth-exploit'
@@ -47,6 +59,18 @@ export type PromptName =
   | 'vuln-business-logic'
   | 'vuln-client-side'
   | 'vuln-web-hardening'
+  | 'vuln-info-gathering'
+  | 'vuln-config-deploy'
+  | 'vuln-session-mgmt'
+  | 'vuln-error-handling'
+  | 'vuln-crypto'
+  | 'vuln-api-testing'
+  | 'exploit-info-gathering'
+  | 'exploit-config-deploy'
+  | 'exploit-session-mgmt'
+  | 'exploit-error-handling'
+  | 'exploit-crypto'
+  | 'exploit-api-testing'
   | 'exploit-injection'
   | 'exploit-xss'
   | 'exploit-auth'
@@ -98,6 +122,18 @@ export function getPromptNameForAgent(agentName: AgentName): PromptName {
     'business-logic-vuln': 'vuln-business-logic',
     'client-side-vuln': 'vuln-client-side',
     'web-hardening': 'vuln-web-hardening',
+    'info-gathering-vuln': 'vuln-info-gathering',
+    'config-deploy-vuln': 'vuln-config-deploy',
+    'session-mgmt-vuln': 'vuln-session-mgmt',
+    'error-handling-vuln': 'vuln-error-handling',
+    'crypto-vuln': 'vuln-crypto',
+    'api-testing-vuln': 'vuln-api-testing',
+    'info-gathering-exploit': 'exploit-info-gathering',
+    'config-deploy-exploit': 'exploit-config-deploy',
+    'session-mgmt-exploit': 'exploit-session-mgmt',
+    'error-handling-exploit': 'exploit-error-handling',
+    'crypto-exploit': 'exploit-crypto',
+    'api-testing-exploit': 'exploit-api-testing',
     'injection-exploit': 'exploit-injection',
     'xss-exploit': 'exploit-xss',
     'auth-exploit': 'exploit-auth',
