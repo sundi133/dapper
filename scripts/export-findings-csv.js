@@ -100,7 +100,8 @@ You are a senior penetration-testing report analyst.
 2. Identify ALL discrete security findings / vulnerabilities across all files.
 3. Cross-reference findings across files (e.g. an exploitation queue JSON may list a finding ID that also appears in an evidence markdown).
 4. For each unique finding, extract as much structured detail as possible.
-5. Write the final result as a SINGLE valid JSON array to: ${jsonOutputPath}
+5. For each finding, generate a clear step-by-step developer verification guide.
+6. Write the final result as a SINGLE valid JSON array to: ${jsonOutputPath}
 
 ## CRITICAL: BE EFFICIENT WITH TOOL CALLS
 You have a limited turn budget. DO NOT waste turns reading one file at a time.
@@ -140,6 +141,18 @@ You have a limited turn budget. DO NOT waste turns reading one file at a time.
    - source_file: Which file(s) this finding came from
    - notes: Any additional notes
 
+   IMPORTANT — ADDITIONAL REQUIRED FIELD:
+   - developer_verification_steps: A clear, numbered, step-by-step guide that a developer can follow
+     to reproduce and verify this vulnerability in their own environment.
+     This must be actionable and specific to THIS finding, not generic advice.
+     Format as a numbered list separated by " | " (pipe with spaces).
+     Example: "1. Start the application locally | 2. Authenticate as a regular user (role: viewer) | 3. Send GET /api/v1/users/OTHER_USER_ID with your session token | 4. Observe that the response returns another user's PII without authorization check | 5. Compare with admin-only endpoint to confirm BOLA | 6. Expected: 403 Forbidden. Actual: 200 OK with full user object"
+     Include: prerequisites/setup, exact request details (method, URL, headers, body),
+     what to observe, expected vs actual behavior, and how to confirm the fix works.
+     If the finding has exploit evidence or attack steps in the source data, base the
+     verification steps on that real evidence. If not, synthesize reasonable steps
+     from the vulnerability type, endpoint, parameter, and context available.
+
    If you discover additional relevant fields in the data, include them too.
 
 6. Write the merged JSON array to: ${jsonOutputPath}
@@ -151,6 +164,7 @@ You have a limited turn budget. DO NOT waste turns reading one file at a time.
 - BE EFFICIENT. Batch file reads using bash. Do not read one file per turn.
 - Merge information: if the same finding ID appears in multiple files, combine all fields into one record.
 - Do NOT invent data. If a field is not present, use empty string "".
+- The developer_verification_steps field is REQUIRED for every finding. Generate it based on available context.
 - After writing the JSON output file, output a brief summary of how many findings you found.
 `;
 
@@ -221,6 +235,8 @@ const runAgent = async () => {
   const taskPrompt = `Analyze all security deliverables in ${absDeliverables} and extract every finding into a structured JSON file at ${jsonOutputPath}.
 
 IMPORTANT: Be efficient with tool calls. Use bash to batch-read files (e.g. "for f in *.json; do echo '=== $f ==='; cat $f; done") instead of reading one file at a time. You have ${maxTurns} turns — use them wisely.
+
+REQUIRED: Every finding MUST include a "developer_verification_steps" field with numbered, actionable steps a developer can follow to reproduce and verify the vulnerability. Base these on the actual evidence, endpoints, parameters, and exploit details found in the deliverables.
 
 Start by listing the files, then batch-read them.`;
 
@@ -415,6 +431,7 @@ const findingsToCSV = (findings) => {
     'source_endpoint', 'parameter', 'code_location',
     'missing_defense', 'attack_path', 'exploitation_hypothesis',
     'confidence', 'externally_exploitable', 'remediation',
+    'developer_verification_steps',
     'evidence_snippet', 'exploit_result', 'affected_endpoint',
     'attack_steps_summary', 'report_section', 'source_file', 'notes',
   ];
@@ -431,6 +448,10 @@ const findingsToCSV = (findings) => {
   }
 
   logInfo(`CSV columns (${header.length}): ${DIM}${header.join(', ')}${RESET}`);
+
+  // Check how many findings have verification steps
+  const withSteps = findings.filter(f => f.developer_verification_steps && f.developer_verification_steps.length > 0).length;
+  logInfo(`Findings with verification steps: ${withSteps}/${findings.length}`);
 
   const lines = [header.map(csvEscape).join(',')];
   for (const row of findings) {

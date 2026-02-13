@@ -528,8 +528,6 @@ For a detailed breakdown of features, technical differences, and enterprise use 
 📧 **Email**: [shannon@keygraph.io](mailto:shannon@keygraph.io)
 
 ---
+Report:
+node scripts/export-findings-csv.js repos/votal.ai/deliverables --model claude-opus-4-6
 
-<p align="center">
-  <b>Built with ❤️ by the Keygraph team</b><br>
-  <i>Making application security accessible to everyone</i>
-</p>
