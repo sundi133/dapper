@@ -18,6 +18,33 @@ import fs from 'fs';
 import path from 'path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
+// ── Logging helpers ─────────────────────────────────────────────────────────
+
+const CYAN = '\x1b[36m';
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const RED = '\x1b[31m';
+const DIM = '\x1b[2m';
+const BOLD = '\x1b[1m';
+const RESET = '\x1b[0m';
+
+const timestamp = () => {
+  const now = new Date();
+  return `${DIM}[${now.toLocaleTimeString()}]${RESET}`;
+};
+
+const log = (icon, color, ...args) => {
+  console.log(`${timestamp()} ${color}${icon}${RESET}`, ...args);
+};
+
+const logInfo = (...args) => log('ℹ', CYAN, ...args);
+const logSuccess = (...args) => log('✓', GREEN, ...args);
+const logWarn = (...args) => log('⚠', YELLOW, ...args);
+const logError = (...args) => log('✗', RED, ...args);
+const logTool = (...args) => log('🔧', YELLOW, ...args);
+const logAgent = (...args) => log('🤖', CYAN, ...args);
+const logFile = (...args) => log('📄', DIM, ...args);
+
 // ── CLI args ────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -37,12 +64,12 @@ const maxTurns = parseInt(flag('max-turns') || '30', 10);
 // ── Validation ──────────────────────────────────────────────────────────────
 
 if (!fs.existsSync(deliverablesDir)) {
-  console.error(`Deliverables directory not found: ${deliverablesDir}`);
+  logError(`Deliverables directory not found: ${deliverablesDir}`);
   process.exit(1);
 }
 
 if (!process.env.ANTHROPIC_API_KEY && !process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-  console.error('Missing ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.');
+  logError('Missing ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.');
   process.exit(1);
 }
 
@@ -50,11 +77,16 @@ const absDeliverables = path.resolve(deliverablesDir);
 const absOutput = path.resolve(outputPath);
 const jsonOutputPath = absOutput.replace(/\.csv$/, '') + '_findings.json';
 
-console.log(`Deliverables : ${absDeliverables}`);
-console.log(`Output CSV   : ${absOutput}`);
-console.log(`JSON interim : ${jsonOutputPath}`);
-console.log(`Model        : ${model}`);
-console.log(`Max turns    : ${maxTurns}`);
+console.log('');
+console.log(`${BOLD}═══════════════════════════════════════════════════════════${RESET}`);
+console.log(`${BOLD}  Agentic Security Findings Exporter${RESET}`);
+console.log(`${BOLD}═══════════════════════════════════════════════════════════${RESET}`);
+console.log('');
+logInfo(`Deliverables : ${absDeliverables}`);
+logInfo(`Output CSV   : ${absOutput}`);
+logInfo(`JSON interim : ${jsonOutputPath}`);
+logInfo(`Model        : ${model}`);
+logInfo(`Max turns    : ${maxTurns}`);
 console.log('');
 
 // ── Agent instructions (appended to claude_code preset) ─────────────────────
@@ -124,6 +156,42 @@ const extractContent = (message) => {
   return String(content);
 };
 
+const extractToolCalls = (message) => {
+  if (!message?.message?.content) return [];
+  const content = message.message.content;
+  if (!Array.isArray(content)) return [];
+  return content.filter((c) => c.type === 'tool_use');
+};
+
+const formatToolInput = (tool) => {
+  const name = tool.name || 'unknown';
+  const input = tool.input || {};
+
+  if (name === 'Bash' || name === 'bash') {
+    const cmd = input.command || '';
+    return `${YELLOW}bash${RESET} → ${DIM}${cmd.length > 120 ? cmd.slice(0, 120) + '...' : cmd}${RESET}`;
+  }
+  if (name === 'Read' || name === 'read') {
+    const file = input.file_path || input.path || '';
+    return `${CYAN}read${RESET} → ${DIM}${file}${RESET}`;
+  }
+  if (name === 'Write' || name === 'write') {
+    const file = input.file_path || input.path || '';
+    const size = (input.content || input.file_text || '').length;
+    return `${GREEN}write${RESET} → ${DIM}${file} (${size} chars)${RESET}`;
+  }
+  if (name === 'Glob' || name === 'glob') {
+    const pattern = input.pattern || input.glob || '';
+    return `${DIM}glob${RESET} → ${DIM}${pattern}${RESET}`;
+  }
+  if (name === 'Grep' || name === 'grep') {
+    const pattern = input.pattern || input.regex || '';
+    return `${DIM}grep${RESET} → ${DIM}${pattern}${RESET}`;
+  }
+  // Fallback
+  return `${DIM}${name}${RESET} → ${DIM}${JSON.stringify(input).slice(0, 100)}${RESET}`;
+};
+
 const runAgent = async () => {
   const options = {
     model,
@@ -131,8 +199,6 @@ const runAgent = async () => {
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
     allowedTools: ['Bash', 'Read', 'Write', 'Glob', 'Grep'],
-    // CRITICAL: Use the claude_code preset so the agent knows how to use tools,
-    // then append our analysis instructions.
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',
@@ -145,43 +211,106 @@ const runAgent = async () => {
 
   let resultText = '';
   let gotResult = false;
+  let turnNum = 0;
+  let toolCallCount = 0;
+  const startTime = Date.now();
+
+  logInfo('Launching agent...');
+  console.log('');
 
   try {
     for await (const message of query({ prompt: taskPrompt, options })) {
+      // ── System init ──
       if (message.type === 'system' && message.subtype === 'init') {
-        console.log(`Session: ${message.session_id}`);
+        logSuccess(`Session started: ${DIM}${message.session_id}${RESET}`);
+        console.log('');
       }
+
+      // ── Assistant turn ──
       if (message.type === 'assistant') {
+        turnNum++;
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`${timestamp()} ${BOLD}── Turn ${turnNum} ──${RESET} ${DIM}(${elapsed}s elapsed)${RESET}`);
+
+        // Log tool calls
+        const tools = extractToolCalls(message);
+        for (const tool of tools) {
+          toolCallCount++;
+          logTool(`[${toolCallCount}] ${formatToolInput(tool)}`);
+        }
+
+        // Log assistant text (truncated)
         const text = extractContent(message);
         if (text) {
           resultText = text;
-          process.stdout.write('.');
+          const preview = text.replace(/\s+/g, ' ').trim();
+          if (preview.length > 0) {
+            const truncated = preview.length > 200 ? preview.slice(0, 200) + '...' : preview;
+            logAgent(`${DIM}${truncated}${RESET}`);
+          }
+        }
+        console.log('');
+      }
+
+      // ── User message (tool results flowing back) ──
+      if (message.type === 'user') {
+        const content = message.message?.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === 'tool_result') {
+              const resultPreview = typeof block.content === 'string'
+                ? block.content
+                : Array.isArray(block.content)
+                  ? block.content.map(c => c.text || '').join(' ')
+                  : '';
+              if (resultPreview) {
+                const lines = resultPreview.split('\n').length;
+                const chars = resultPreview.length;
+                logFile(`Tool result: ${DIM}${lines} lines, ${chars} chars${RESET}`);
+              }
+            }
+          }
         }
       }
+
+      // ── Final result ──
       if (message.type === 'result') {
         gotResult = true;
         const cost = message.total_cost_usd?.toFixed(4) || '?';
         const dur = ((message.duration_ms || 0) / 1000).toFixed(1);
-        console.log(`\nAgent completed: ${message.num_turns} turns, ${dur}s, $${cost}`);
+        const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        console.log('');
+        console.log(`${BOLD}═══════════════════════════════════════════════════════════${RESET}`);
+        console.log(`${BOLD}  Agent Summary${RESET}`);
+        console.log(`${BOLD}═══════════════════════════════════════════════════════════${RESET}`);
+        logSuccess(`Status     : ${message.is_error ? RED + 'ERROR' : GREEN + 'SUCCESS'}${RESET}`);
+        logInfo(`Turns      : ${message.num_turns}`);
+        logInfo(`Tool calls : ${toolCallCount}`);
+        logInfo(`Duration   : ${dur}s (wall: ${totalElapsed}s)`);
+        logInfo(`Cost       : $${cost}`);
+
         if (message.is_error) {
-          console.error(`Agent reported error: ${message.result}`);
+          logError(`Error: ${message.result}`);
         }
         if (message.result) {
           resultText = message.result;
+          const preview = resultText.replace(/\s+/g, ' ').trim();
+          const truncated = preview.length > 300 ? preview.slice(0, 300) + '...' : preview;
+          logAgent(`Final: ${DIM}${truncated}${RESET}`);
         }
+        console.log('');
       }
     }
   } catch (err) {
-    // If we already got a result message, the exit code 1 is a known
-    // SDK quirk — the agent finished but the process cleanup fails.
     if (gotResult) {
-      console.log('(Ignoring post-completion process exit signal)');
+      logWarn('Ignoring post-completion process exit signal (SDK quirk)');
       return resultText;
     }
     const details = err && typeof err === 'object'
       ? JSON.stringify(err, Object.getOwnPropertyNames(err), 2)
       : String(err);
-    console.error(`\nAgent error: ${details}`);
+    logError(`Agent error: ${details}`);
     process.exit(1);
   }
 
@@ -202,7 +331,6 @@ const tryLoadJson = (filePath) => {
   if (!fs.existsSync(filePath)) return null;
   try {
     const raw = fs.readFileSync(filePath, 'utf8').trim();
-    // Strip markdown fences if the agent included them
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
     const data = JSON.parse(cleaned);
     if (Array.isArray(data) && data.length > 0) return data;
@@ -211,24 +339,28 @@ const tryLoadJson = (filePath) => {
 };
 
 const loadFindings = () => {
+  logInfo('Loading agent output...');
+
   // Primary: where we told the agent to write
   const primary = tryLoadJson(jsonOutputPath);
   if (primary) {
-    console.log(`Loaded ${primary.length} findings from ${jsonOutputPath}`);
+    logSuccess(`Loaded ${primary.length} findings from ${jsonOutputPath}`);
     return primary;
   }
 
-  // Fallback: scan the deliverables dir for any JSON arrays the agent may have written
-  console.log('Primary JSON not found, scanning for agent output...');
+  // Fallback: scan for any JSON arrays
+  logWarn('Primary JSON not found, scanning for agent output...');
   const candidates = [];
 
-  // Check deliverables dir and parent for any new json files
   for (const dir of [absDeliverables, path.dirname(absDeliverables), process.cwd()]) {
     try {
       for (const f of fs.readdirSync(dir)) {
         if (f.endsWith('.json')) {
           const fp = path.join(dir, f);
-          if (!candidates.includes(fp)) candidates.push(fp);
+          if (!candidates.includes(fp)) {
+            candidates.push(fp);
+            logFile(`Candidate: ${DIM}${fp}${RESET}`);
+          }
         }
       }
     } catch { /* ignore */ }
@@ -237,7 +369,7 @@ const loadFindings = () => {
   for (const candidate of candidates) {
     const data = tryLoadJson(candidate);
     if (data) {
-      console.log(`Loaded ${data.length} findings from ${candidate}`);
+      logSuccess(`Loaded ${data.length} findings from ${candidate}`);
       return data;
     }
   }
@@ -246,7 +378,6 @@ const loadFindings = () => {
 };
 
 const findingsToCSV = (findings) => {
-  // Dynamically discover all keys across all findings
   const keySet = new Set();
   for (const f of findings) {
     for (const k of Object.keys(f)) {
@@ -254,7 +385,6 @@ const findingsToCSV = (findings) => {
     }
   }
 
-  // Preferred column order — anything discovered beyond this goes at the end
   const preferredOrder = [
     'id', 'type', 'severity', 'status',
     'source_endpoint', 'parameter', 'code_location',
@@ -275,6 +405,8 @@ const findingsToCSV = (findings) => {
     header.push(k);
   }
 
+  logInfo(`CSV columns (${header.length}): ${DIM}${header.join(', ')}${RESET}`);
+
   const lines = [header.map(csvEscape).join(',')];
   for (const row of findings) {
     lines.push(
@@ -287,20 +419,26 @@ const findingsToCSV = (findings) => {
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
-console.log('Starting agentic analysis...\n');
+logInfo('Starting agentic analysis...');
+console.log('');
 
 await runAgent();
 
 const findings = loadFindings();
 
 if (!findings || findings.length === 0) {
-  console.error('\nNo findings extracted.');
-  console.error('Check these locations for agent output:');
-  console.error(`  - ${jsonOutputPath}`);
-  console.error(`  - ${absDeliverables}/*.json`);
+  logError('No findings extracted.');
+  logError('Check these locations for agent output:');
+  logError(`  - ${jsonOutputPath}`);
+  logError(`  - ${absDeliverables}/*.json`);
   process.exit(1);
 }
 
 const csv = findingsToCSV(findings);
 fs.writeFileSync(absOutput, csv);
-console.log(`\nCSV written: ${absOutput} (${findings.length} findings)`);
+
+console.log('');
+console.log(`${BOLD}═══════════════════════════════════════════════════════════${RESET}`);
+logSuccess(`${BOLD}CSV written: ${absOutput} (${findings.length} findings)${RESET}`);
+console.log(`${BOLD}═══════════════════════════════════════════════════════════${RESET}`);
+console.log('');
