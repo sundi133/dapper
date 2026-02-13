@@ -1,0 +1,42 @@
+# Example configuration file for pentest-agent
+# Copy this file and modify it for your specific testing needs
+
+authentication:
+  login_type: form  # Options: 'form' or 'sso'
+  login_url: "https://odisha-media-monitor.votal.ai/sign-in"
+  credentials:
+    username: "sundi133@gmail.com"
+    password: "Votal_5421_5421"
+  
+  # Natural language instructions for login flow
+  login_flow:
+    - "Type $username into the email field"
+    - "Type $password into the password field"
+    - "Click the 'Sign In' button"
+  
+  success_condition:
+    type: url_contains  # Options: 'url_contains' or 'element_present'
+    value: "/dashboard"
+
+rules:
+  avoid:
+    - description: "Do not test the marketing site subdomain"
+      type: subdomain
+      url_path: "www"
+    
+    - description: "Skip logout functionality"
+      type: path
+      url_path: "/logout"
+    
+    - description: "No DELETE operations on user API"
+      type: path
+      url_path: "/api/v1/users/*"
+  
+  focus:
+    - description: "Prioritize beta admin panel subdomain"
+      type: subdomain
+      url_path: "beta-admin"
+    
+    - description: "Focus on user profile updates"
+      type: path
+      url_path: "/api/v2/user-profile"
