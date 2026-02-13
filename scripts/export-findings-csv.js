@@ -59,7 +59,7 @@ const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[
 const deliverablesDir = positional[0] || 'deliverables';
 const outputPath = positional[1] || path.join(deliverablesDir, 'findings.csv');
 const model = flag('model') || 'claude-sonnet-4-5-20250929';
-const maxTurns = parseInt(flag('max-turns') || '30', 10);
+const maxTurns = parseInt(flag('max-turns') || '120', 10);
 
 // ── Validation ──────────────────────────────────────────────────────────────
 
@@ -102,9 +102,20 @@ You are a senior penetration-testing report analyst.
 4. For each unique finding, extract as much structured detail as possible.
 5. Write the final result as a SINGLE valid JSON array to: ${jsonOutputPath}
 
+## CRITICAL: BE EFFICIENT WITH TOOL CALLS
+You have a limited turn budget. DO NOT waste turns reading one file at a time.
+- Use bash to read multiple files at once: cat file1.json file2.md file3.md
+- For large directories, use: for f in *.json *.md; do echo "=== $f ==="; cat "$f"; done
+- Use bash head/tail to preview files first if needed, then batch-read
+- Prioritize: list files → batch-read ALL files in 1-3 bash calls → analyze → write JSON
+- DO NOT use the Read tool one file at a time. Use bash cat to read multiple files per turn.
+
 ## STEP-BY-STEP INSTRUCTIONS
-1. First, list all files in the deliverables directory.
-2. Read each file to understand the formats present (JSON queues, markdown reports, text notes, etc.).
+1. First, run: ls -la "${absDeliverables}" to see all files and their sizes.
+2. Batch-read files efficiently using bash:
+   - For JSON files: for f in "${absDeliverables}"/*.json; do echo "=== $(basename $f) ==="; cat "$f"; done
+   - For MD files: for f in "${absDeliverables}"/*.md; do echo "=== $(basename $f) ==="; cat "$f"; done
+   - For other files: cat them similarly
 3. Extract every discrete security finding across ALL files.
 4. Cross-reference: if a finding ID (like "APP-VULN-001") appears in multiple files, merge the data into one record.
 5. For each finding, extract whichever of these fields are available (use empty string "" for missing):
@@ -133,10 +144,11 @@ You are a senior penetration-testing report analyst.
 
 6. Write the merged JSON array to: ${jsonOutputPath}
    The file must contain ONLY a valid JSON array — no markdown fences, no commentary, no extra text.
-   Use the Write tool to write the file.
+   Use the Write tool or bash to write the file.
 
 ## IMPORTANT RULES
 - Be thorough. Read every file. Do not skip files.
+- BE EFFICIENT. Batch file reads using bash. Do not read one file per turn.
 - Merge information: if the same finding ID appears in multiple files, combine all fields into one record.
 - Do NOT invent data. If a field is not present, use empty string "".
 - After writing the JSON output file, output a brief summary of how many findings you found.
@@ -169,7 +181,7 @@ const formatToolInput = (tool) => {
 
   if (name === 'Bash' || name === 'bash') {
     const cmd = input.command || '';
-    return `${YELLOW}bash${RESET} → ${DIM}${cmd.length > 120 ? cmd.slice(0, 120) + '...' : cmd}${RESET}`;
+    return `${YELLOW}bash${RESET} → ${DIM}${cmd.length > 150 ? cmd.slice(0, 150) + '...' : cmd}${RESET}`;
   }
   if (name === 'Read' || name === 'read') {
     const file = input.file_path || input.path || '';
@@ -188,7 +200,6 @@ const formatToolInput = (tool) => {
     const pattern = input.pattern || input.regex || '';
     return `${DIM}grep${RESET} → ${DIM}${pattern}${RESET}`;
   }
-  // Fallback
   return `${DIM}${name}${RESET} → ${DIM}${JSON.stringify(input).slice(0, 100)}${RESET}`;
 };
 
@@ -207,7 +218,11 @@ const runAgent = async () => {
     cwd: absDeliverables,
   };
 
-  const taskPrompt = `Analyze all security deliverables in ${absDeliverables} and extract every finding into a structured JSON file at ${jsonOutputPath}. Start by listing the files in the directory.`;
+  const taskPrompt = `Analyze all security deliverables in ${absDeliverables} and extract every finding into a structured JSON file at ${jsonOutputPath}.
+
+IMPORTANT: Be efficient with tool calls. Use bash to batch-read files (e.g. "for f in *.json; do echo '=== $f ==='; cat $f; done") instead of reading one file at a time. You have ${maxTurns} turns — use them wisely.
+
+Start by listing the files, then batch-read them.`;
 
   let resultText = '';
   let gotResult = false;
@@ -230,7 +245,17 @@ const runAgent = async () => {
       if (message.type === 'assistant') {
         turnNum++;
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`${timestamp()} ${BOLD}── Turn ${turnNum} ──${RESET} ${DIM}(${elapsed}s elapsed)${RESET}`);
+        const turnBudget = `${turnNum}/${maxTurns}`;
+        const budgetColor = turnNum > maxTurns * 0.8 ? RED : turnNum > maxTurns * 0.5 ? YELLOW : GREEN;
+        console.log(`${timestamp()} ${BOLD}── Turn ${budgetColor}${turnBudget}${RESET}${BOLD} ──${RESET} ${DIM}(${elapsed}s elapsed)${RESET}`);
+
+        // Warn when running low on turns
+        if (turnNum === Math.floor(maxTurns * 0.7)) {
+          logWarn(`${YELLOW}70% of turn budget used (${turnNum}/${maxTurns}). Agent should start writing output soon.${RESET}`);
+        }
+        if (turnNum === Math.floor(maxTurns * 0.9)) {
+          logWarn(`${RED}90% of turn budget used (${turnNum}/${maxTurns})! Agent must write output NOW.${RESET}`);
+        }
 
         // Log tool calls
         const tools = extractToolCalls(message);
@@ -285,7 +310,7 @@ const runAgent = async () => {
         console.log(`${BOLD}  Agent Summary${RESET}`);
         console.log(`${BOLD}═══════════════════════════════════════════════════════════${RESET}`);
         logSuccess(`Status     : ${message.is_error ? RED + 'ERROR' : GREEN + 'SUCCESS'}${RESET}`);
-        logInfo(`Turns      : ${message.num_turns}`);
+        logInfo(`Turns      : ${message.num_turns} / ${maxTurns}`);
         logInfo(`Tool calls : ${toolCallCount}`);
         logInfo(`Duration   : ${dur}s (wall: ${totalElapsed}s)`);
         logInfo(`Cost       : $${cost}`);
