@@ -20,27 +20,27 @@ cp .env.example .env
 #   ANTHROPIC_API_KEY=your-key
 
 # Start a pentest workflow
-./shannon start URL=<url> REPO=<name>
+./dapper start URL=<url> REPO=<name>
 ```
 
 Examples:
 ```bash
-./shannon start URL=https://example.com REPO=repo-name
-./shannon start URL=https://example.com REPO=repo-name CONFIG=./configs/my-config.yaml
-./shannon start URL=https://example.com REPO=repo-name OUTPUT=./my-reports
+./dapper start URL=https://example.com REPO=repo-name
+./dapper start URL=https://example.com REPO=repo-name CONFIG=./configs/my-config.yaml
+./dapper start URL=https://example.com REPO=repo-name OUTPUT=./my-reports
 ```
 
 ### Monitoring Progress
 ```bash
-./shannon logs                      # View real-time worker logs
-./shannon query ID=<workflow-id>    # Query specific workflow progress
+./dapper logs                      # View real-time worker logs
+./dapper query ID=<workflow-id>    # Query specific workflow progress
 # Temporal Web UI available at http://localhost:8233
 ```
 
-### Stopping Shannon
+### Stopping Dapper
 ```bash
-./shannon stop                      # Stop containers (preserves workflow data)
-./shannon stop CLEAN=true           # Full cleanup including volumes
+./dapper stop                      # Stop containers (preserves workflow data)
+./dapper stop CLEAN=true           # Full cleanup including volumes
 ```
 
 ### Options
@@ -61,7 +61,7 @@ TOTP generation is handled automatically via the `generate_totp` MCP tool during
 npm run build
 
 # Run with pipeline testing mode (fast, minimal deliverables)
-./shannon start URL=<url> REPO=<name> PIPELINE_TESTING=true
+./dapper start URL=<url> REPO=<name> PIPELINE_TESTING=true
 ```
 
 ## Architecture & Components
@@ -231,7 +231,7 @@ The application uses a comprehensive error handling system with:
 ### Testing Mode
 The agent includes a testing mode that skips external tool execution for faster development cycles:
 ```bash
-./shannon start URL=<url> REPO=<name> PIPELINE_TESTING=true
+./dapper start URL=<url> REPO=<name> PIPELINE_TESTING=true
 ```
 
 ### Security Focus
@@ -258,7 +258,7 @@ The tool should only be used on systems you own or have explicit permission to t
 - `src/audit/` - Crash-safe logging and metrics system
 
 **Configuration:**
-- `shannon` - CLI script for running pentests
+- `dapper` - CLI script for running pentests
 - `docker-compose.yml` - Temporal server + worker containers
 - `configs/` - YAML configs with `config-schema.json` for validation
 - `configs/router-config.json` - Router service configuration for multi-model support
@@ -269,11 +269,11 @@ The tool should only be used on systems you own or have explicit permission to t
 
 ### Router Mode (Multi-Model Support)
 
-Shannon supports routing Claude Agent SDK requests through alternative LLM providers via [claude-code-router](https://github.com/musistudio/claude-code-router).
+Dapper supports routing Claude Agent SDK requests through alternative LLM providers via [claude-code-router](https://github.com/musistudio/claude-code-router).
 
 **Enable router mode:**
 ```bash
-./shannon start URL=<url> REPO=<name> ROUTER=true
+./dapper start URL=<url> REPO=<name> ROUTER=true
 ```
 
 **Supported Providers:**
@@ -294,7 +294,7 @@ OPENROUTER_API_KEY=sk-or-your-key
 ROUTER_DEFAULT=openrouter,google/gemini-3-flash-preview
 ```
 
-**Note:** Shannon is optimized for Anthropic's Claude models. Alternative providers are useful for cost savings during development but may produce varying results.
+**Note:** Dapper is optimized for Anthropic's Claude models. Alternative providers are useful for cost savings during development but may produce varying results.
 
 ## Troubleshooting
 
@@ -304,7 +304,7 @@ ROUTER_DEFAULT=openrouter,google/gemini-3-flash-preview
 ### Temporal & Docker Issues
 - **"Temporal not ready"**: Wait for health check or run `docker compose logs temporal`
 - **Worker not processing**: Ensure worker container is running with `docker compose ps`
-- **Reset workflow state**: `./shannon stop CLEAN=true` removes all Temporal data and volumes
+- **Reset workflow state**: `./dapper stop CLEAN=true` removes all Temporal data and volumes
 - **Local apps unreachable**: Use `host.docker.internal` instead of `localhost` for URLs
 - **Container permissions**: On Linux, may need `sudo` for docker commands
 

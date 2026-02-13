@@ -40,7 +40,7 @@ services:
       - seccomp:unconfined
 
   # Optional: claude-code-router for multi-model support
-  # Start with: ROUTER=true ./shannon start ...
+  # Start with: ROUTER=true ./dapper start ...
   router:
     image: node:20-slim
     profiles: ["router"]  # Only starts when explicitly requested

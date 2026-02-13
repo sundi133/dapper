@@ -1,18 +1,18 @@
 > [!NOTE]
-> **[Shannon Lite achieves a 96.15% success rate on a hint-free, source-aware XBOW benchmark. &rarr;](https://github.com/KeygraphHQ/shannon/tree/main/xben-benchmark-results/README.md)**
+> **[Dapper Lite achieves a 96.15% success rate on a hint-free, source-aware XBOW benchmark. &rarr;](https://github.com/KeygraphHQ/shannon/tree/main/xben-benchmark-results/README.md)**
 
 
 <div align="center">
 
 <a href="https://trendshift.io/repositories/15604" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15604" alt="KeygraphHQ%2Fshannon | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-<img src="./assets/shannon-screen.png?v=2" alt="Shannon Screen" width="100%">
+<img src="./assets/shannon-screen.png?v=2" alt="Dapper Screen" width="100%">
 
-# Shannon is your fully autonomous AI pentester.
+# Dapper is your fully autonomous AI pentester.
 
-Shannon’s job is simple: break your web app before anyone else does. <br />
+Dapper's job is simple: break your web app before anyone else does. <br />
 The Red Team to your vibe-coding Blue team. <br />
-Every Claude (coder) deserves their Shannon.
+Every Claude (coder) deserves their Dapper.
 
 ---
 
@@ -21,30 +21,41 @@ Every Claude (coder) deserves their Shannon.
 ---
 </div>
 
-## 🎯 What is Shannon?
+> [!TIP]
+> **Dapper is a fork of [Shannon](https://github.com/KeygraphHQ/shannon)** with advanced agents and enhanced capabilities.
+>
+> While Shannon provides a solid foundation for AI-powered pentesting, Dapper extends this with:
+> - **Additional specialized agents** for more comprehensive vulnerability detection
+> - **Enhanced exploitation capabilities** across a broader range of attack vectors
+> - **Improved analysis techniques** for deeper code understanding
+> - **Extended tooling integration** for more thorough reconnaissance
+>
+> All improvements are built on Shannon's proven architecture while pushing the boundaries of autonomous security testing.
 
-Shannon is an AI pentester that delivers actual exploits, not just alerts.
+## 🎯 What is Dapper?
 
-Shannon's goal is to break your web app before someone else does. It autonomously hunts for attack vectors in your code, then uses its built-in browser to execute real exploits, such as injection attacks, and auth bypass, to prove the vulnerability is actually exploitable.
+Dapper is an AI pentester that delivers actual exploits, not just alerts.
 
-**What Problem Does Shannon Solve?**
+Dapper's goal is to break your web app before someone else does. It autonomously hunts for attack vectors in your code, then uses its built-in browser to execute real exploits, such as injection attacks, and auth bypass, to prove the vulnerability is actually exploitable.
+
+**What Problem Does Dapper Solve?**
 
 Thanks to tools like Claude Code and Cursor, your team ships code non-stop. But your penetration test? That happens once a year. This creates a *massive* security gap. For the other 364 days, you could be unknowingly shipping vulnerabilities to production.
 
-Shannon closes this gap by acting as your on-demand whitebox pentester. It doesn't just find potential issues. It executes real exploits, providing concrete proof of vulnerabilities. This lets you ship with confidence, knowing every build can be secured.
+Dapper closes this gap by acting as your on-demand whitebox pentester. It doesn't just find potential issues. It executes real exploits, providing concrete proof of vulnerabilities. This lets you ship with confidence, knowing every build can be secured.
 
 > [!NOTE]
 > **From Autonomous Pentesting to Automated Compliance**
 >
-> Shannon is a core component of the **Keygraph Security and Compliance Platform**.
+> Dapper is a core component of the **Keygraph Security and Compliance Platform**.
 >
-> While Shannon automates the critical task of penetration testing for your application, our broader platform automates your entire compliance journey—from evidence collection to audit readiness. We're building the "Rippling for Cybersecurity," a single platform to manage your security posture and streamline compliance frameworks like SOC 2 and HIPAA.
+> While Dapper automates the critical task of penetration testing for your application, our broader platform automates your entire compliance journey—from evidence collection to audit readiness. We're building the "Rippling for Cybersecurity," a single platform to manage your security posture and streamline compliance frameworks like SOC 2 and HIPAA.
 >
 > ➡️ **[Learn more about the Keygraph Platform](https://keygraph.io)**
 
-## 🎬 See Shannon in Action
+## 🎬 See Dapper in Action
 
-**Real Results**: Shannon discovered 20+ critical vulnerabilities in OWASP Juice Shop, including complete auth bypass and database exfiltration. [See full report →](sample-reports/shannon-report-juice-shop.md)
+**Real Results**: Dapper discovered 20+ critical vulnerabilities in OWASP Juice Shop, including complete auth bypass and database exfiltration. [See full report →](sample-reports/shannon-report-juice-shop.md)
 
 ![Demo](assets/shannon-action.gif)
 
@@ -59,31 +70,31 @@ Shannon closes this gap by acting as your on-demand whitebox pentester. It doesn
 
 ## 📦 Product Line
 
-Shannon is available in two editions:
+Dapper is available in two editions:
 
 | Edition | License | Best For |
 |---------|---------|----------|
-| **Shannon Lite** | AGPL-3.0 | Security teams, independent researchers, testing your own applications |
-| **Shannon Pro** | Commercial | Enterprises requiring advanced features, CI/CD integration, and dedicated support |
+| **Dapper Lite** | AGPL-3.0 | Security teams, independent researchers, testing your own applications |
+| **Dapper Pro** | Commercial | Enterprises requiring advanced features, CI/CD integration, and dedicated support |
 
-> **This repository contains Shannon Lite,** which utilizes our core autonomous AI pentesting framework. **Shannon Pro** enhances this foundation with an advanced, LLM-powered data flow analysis engine (inspired by the [LLMDFA paper](https://arxiv.org/abs/2402.10754)) for enterprise-grade code analysis and deeper vulnerability detection.
+> **This repository contains Dapper Lite,** which utilizes our core autonomous AI pentesting framework. **Dapper Pro** enhances this foundation with an advanced, LLM-powered data flow analysis engine (inspired by the [LLMDFA paper](https://arxiv.org/abs/2402.10754)) for enterprise-grade code analysis and deeper vulnerability detection.
 
 > [!IMPORTANT]
-> **White-box only.** Shannon Lite is designed for **white-box (source-available)** application security testing.  
+> **White-box only.** Dapper Lite is designed for **white-box (source-available)** application security testing.
 > It expects access to your application's source code and repository layout.
 
 [See feature comparison](./SHANNON-PRO.md)
 ## 📑 Table of Contents
 
-- [What is Shannon?](#-what-is-shannon)
-- [See Shannon in Action](#-see-shannon-in-action)
+- [What is Dapper?](#-what-is-dapper)
+- [See Dapper in Action](#-see-dapper-in-action)
 - [Features](#-features)
 - [Product Line](#-product-line)
 - [Setup & Usage Instructions](#-setup--usage-instructions)
   - [Prerequisites](#prerequisites)
   - [Quick Start](#quick-start)
   - [Monitoring Progress](#monitoring-progress)
-  - [Stopping Shannon](#stopping-shannon)
+  - [Stopping Dapper](#stopping-dapper)
   - [Usage Examples](#usage-examples)
   - [Configuration (Optional)](#configuration-optional)
   - [[EXPERIMENTAL - UNSUPPORTED] Router Mode (Alternative Providers)](#experimental---unsupported-router-mode-alternative-providers)
@@ -111,7 +122,7 @@ Shannon is available in two editions:
 ### Quick Start
 
 ```bash
-# 1. Clone Shannon
+# 1. Clone Dapper
 git clone https://github.com/KeygraphHQ/shannon.git
 cd shannon
 
@@ -126,50 +137,50 @@ ANTHROPIC_API_KEY=your-api-key
 EOF
 
 # 3. Run a pentest
-./shannon start URL=https://your-app.com REPO=your-repo
+./dapper start URL=https://your-app.com REPO=your-repo
 ```
 
-Shannon will build the containers, start the workflow, and return a workflow ID. The pentest runs in the background.
+Dapper will build the containers, start the workflow, and return a workflow ID. The pentest runs in the background.
 
 ### Monitoring Progress
 
 ```bash
 # View real-time worker logs
-./shannon logs
+./dapper logs
 
 # Query a specific workflow's progress
-./shannon query ID=shannon-1234567890
+./dapper query ID=dapper-1234567890
 
 # Open the Temporal Web UI for detailed monitoring
 open http://localhost:8233
 ```
 
-### Stopping Shannon
+### Stopping Dapper
 
 ```bash
 # Stop all containers (preserves workflow data)
-./shannon stop
+./dapper stop
 
 # Full cleanup (removes all data)
-./shannon stop CLEAN=true
+./dapper stop CLEAN=true
 ```
 
 ### Usage Examples
 
 ```bash
 # Basic pentest
-./shannon start URL=https://example.com REPO=repo-name
+./dapper start URL=https://example.com REPO=repo-name
 
 # With a configuration file
-./shannon start URL=https://example.com REPO=repo-name CONFIG=./configs/my-config.yaml
+./dapper start URL=https://example.com REPO=repo-name CONFIG=./configs/my-config.yaml
 
 # Custom output directory
-./shannon start URL=https://example.com REPO=repo-name OUTPUT=./my-reports
+./dapper start URL=https://example.com REPO=repo-name OUTPUT=./my-reports
 ```
 
 ### Prepare Your Repository
 
-Shannon expects target repositories to be placed under the `./repos/` directory at the project root. The `REPO` flag refers to a folder name inside `./repos/`. Copy the repository you want to scan into `./repos/`, or clone it directly there:
+Dapper expects target repositories to be placed under the `./repos/` directory at the project root. The `REPO` flag refers to a folder name inside `./repos/`. Copy the repository you want to scan into `./repos/`, or clone it directly there:
 
 ```bash
 git clone https://github.com/your-org/your-repo.git ./repos/your-repo
@@ -206,7 +217,7 @@ Works out of the box with Docker Desktop installed.
 Docker containers cannot reach `localhost` on your host machine. Use `host.docker.internal` in place of `localhost`:
 
 ```bash
-./shannon start URL=http://host.docker.internal:3000 REPO=repo-name
+./dapper start URL=http://host.docker.internal:3000 REPO=repo-name
 ```
 
 ### Configuration (Optional)
@@ -259,9 +270,9 @@ If your application uses two-factor authentication, simply add the TOTP secret t
 
 ### [EXPERIMENTAL - UNSUPPORTED] Router Mode (Alternative Providers)
 
-Shannon can experimentally route requests through alternative AI providers using claude-code-router. This mode is not officially supported and is intended primarily for:
+Dapper can experimentally route requests through alternative AI providers using claude-code-router. This mode is not officially supported and is intended primarily for:
 
-* **Model experimentation** — try Shannon with GPT-5.2 or Gemini 3–family models
+* **Model experimentation** — try Dapper with GPT-5.2 or Gemini 3–family models
 
 #### Quick Setup
 
@@ -280,7 +291,7 @@ ROUTER_DEFAULT=openai,gpt-5.2  # provider,model format
 2. Run with `ROUTER=true`:
 
 ```bash
-./shannon start URL=https://example.com REPO=repo-name ROUTER=true
+./dapper start URL=https://example.com REPO=repo-name ROUTER=true
 ```
 
 #### Experimental Models
@@ -292,7 +303,7 @@ ROUTER_DEFAULT=openai,gpt-5.2  # provider,model format
 
 #### Disclaimer
 
-This feature is experimental and unsupported. Output quality depends heavily on the model. Shannon is built on top of the Anthropic Agent SDK and is optimized and primarily tested with Anthropic Claude models. Alternative providers may produce inconsistent results (including failing early phases like Recon) depending on the model and routing setup.
+This feature is experimental and unsupported. Output quality depends heavily on the model. Dapper is built on top of the Anthropic Agent SDK and is optimized and primarily tested with Anthropic Claude models. Alternative providers may produce inconsistent results (including failing early phases like Recon) depending on the model and routing setup.
 
 ### Output and Results
 
@@ -314,7 +325,7 @@ audit-logs/{hostname}_{sessionId}/
 
 > **Looking for quantitative benchmarks?** [See full benchmark methodology and results →](./xben-benchmark-results/README.md)
 
-See Shannon's capabilities in action with penetration test results from industry-standard vulnerable applications:
+See Dapper's capabilities in action with penetration test results from industry-standard vulnerable applications:
 
 #### 🧃 **OWASP Juice Shop** • [GitHub](https://github.com/juice-shop/juice-shop)
 
@@ -367,13 +378,13 @@ See Shannon's capabilities in action with penetration test results from industry
 
 ---
 
-*These results demonstrate Shannon's ability to move beyond simple scanning, performing deep contextual exploitation with minimal false positives and actionable proof-of-concepts.*
+*These results demonstrate Dapper's ability to move beyond simple scanning, performing deep contextual exploitation with minimal false positives and actionable proof-of-concepts.*
 
 ---
 
 ## 🏗️ Architecture
 
-Shannon emulates a human penetration tester's methodology using a sophisticated multi-agent architecture. It combines white-box source code analysis with black-box dynamic exploitation across four distinct phases:
+Dapper emulates a human penetration tester's methodology using a sophisticated multi-agent architecture. It combines white-box source code analysis with black-box dynamic exploitation across four distinct phases:
 
 ```
                     ┌──────────────────────┐
@@ -405,13 +416,13 @@ Shannon emulates a human penetration tester's methodology using a sophisticated 
 
 ### Architectural Overview
 
-Shannon is engineered to emulate the methodology of a human penetration tester. It leverages Anthropic's Claude Agent SDK as its core reasoning engine, but its true strength lies in the sophisticated multi-agent architecture built around it. This architecture combines the deep context of **white-box source code analysis** with the real-world validation of **black-box dynamic exploitation**, managed by an orchestrator through four distinct phases to ensure a focus on minimal false positives and intelligent context management.
+Dapper is engineered to emulate the methodology of a human penetration tester. It leverages Anthropic's Claude Agent SDK as its core reasoning engine, but its true strength lies in the sophisticated multi-agent architecture built around it. This architecture combines the deep context of **white-box source code analysis** with the real-world validation of **black-box dynamic exploitation**, managed by an orchestrator through four distinct phases to ensure a focus on minimal false positives and intelligent context management.
 
 ---
 
 #### **Phase 1: Reconnaissance**
 
-The first phase builds a comprehensive map of the application's attack surface. Shannon analyzes the source code and integrates with tools like Nmap and Subfinder to understand the tech stack and infrastructure. Simultaneously, it performs live application exploration via browser automation to correlate code-level insights with real-world behavior, producing a detailed map of all entry points, API endpoints, and authentication mechanisms for the next phase.
+The first phase builds a comprehensive map of the application's attack surface. Dapper analyzes the source code and integrates with tools like Nmap and Subfinder to understand the tech stack and infrastructure. Simultaneously, it performs live application exploration via browser automation to correlate code-level insights with real-world behavior, producing a detailed map of all entry points, API endpoints, and authentication mechanisms for the next phase.
 
 #### **Phase 2: Vulnerability Analysis**
 
@@ -428,46 +439,46 @@ The final phase compiles all validated findings into a professional, actionable 
 
 ## 📋 Coverage and Roadmap
 
-For detailed information about Shannon's security testing coverage and development roadmap, see our [Coverage and Roadmap](./COVERAGE.md) documentation.
+For detailed information about Dapper's security testing coverage and development roadmap, see our [Coverage and Roadmap](./COVERAGE.md) documentation.
 
 ## ⚠️ Disclaimers
 
 ### Important Usage Guidelines & Disclaimers
 
-Please review the following guidelines carefully before using Shannon (Lite). As a user, you are responsible for your actions and assume all liability.
+Please review the following guidelines carefully before using Dapper (Lite). As a user, you are responsible for your actions and assume all liability.
 
 #### **1. Potential for Mutative Effects & Environment Selection**
 
 This is not a passive scanner. The exploitation agents are designed to **actively execute attacks** to confirm vulnerabilities. This process can have mutative effects on the target application and its data.
 
 > [!WARNING]
-> **⚠️ DO NOT run Shannon on production environments.**
+> **⚠️ DO NOT run Dapper on production environments.**
 >
 > - It is intended exclusively for use on sandboxed, staging, or local development environments where data integrity is not a concern.
 > - Potential mutative effects include, but are not limited to: creating new users, modifying or deleting data, compromising test accounts, and triggering unintended side effects from injection attacks.
 
 #### **2. Legal & Ethical Use**
 
-Shannon is designed for legitimate security auditing purposes only.
+Dapper is designed for legitimate security auditing purposes only.
 
 > [!CAUTION]
-> **You must have explicit, written authorization** from the owner of the target system before running Shannon.
+> **You must have explicit, written authorization** from the owner of the target system before running Dapper.
 >
-> Unauthorized scanning and exploitation of systems you do not own is illegal and can be prosecuted under laws such as the Computer Fraud and Abuse Act (CFAA). Keygraph is not responsible for any misuse of Shannon.
+> Unauthorized scanning and exploitation of systems you do not own is illegal and can be prosecuted under laws such as the Computer Fraud and Abuse Act (CFAA). Keygraph is not responsible for any misuse of Dapper.
 
 #### **3. LLM & Automation Caveats**
 
 - **Verification is Required**: While significant engineering has gone into our "proof-by-exploitation" methodology to eliminate false positives, the underlying LLMs can still generate hallucinated or weakly-supported content in the final report. **Human oversight is essential** to validate the legitimacy and severity of all reported findings.
-- **Comprehensiveness**: The analysis in Shannon Lite may not be exhaustive due to the inherent limitations of LLM context windows. For a more comprehensive, graph-based analysis of your entire codebase, **Shannon Pro** leverages its advanced data flow analysis engine to ensure deeper and more thorough coverage.
+- **Comprehensiveness**: The analysis in Dapper Lite may not be exhaustive due to the inherent limitations of LLM context windows. For a more comprehensive, graph-based analysis of your entire codebase, **Dapper Pro** leverages its advanced data flow analysis engine to ensure deeper and more thorough coverage.
 
 #### **4. Scope of Analysis**
 
-- **Targeted Vulnerabilities**: The current version of Shannon Lite specifically targets the following classes of *exploitable* vulnerabilities:
+- **Targeted Vulnerabilities**: The current version of Dapper Lite specifically targets the following classes of *exploitable* vulnerabilities:
   - Broken Authentication & Authorization
   - Injection
   - Cross-Site Scripting (XSS)
   - Server-Side Request Forgery (SSRF)
-- **What Shannon Lite Does Not Cover**: This list is not exhaustive of all potential security risks. Shannon Lite's "proof-by-exploitation" model means it will not report on issues it cannot actively exploit, such as vulnerable third-party libraries or insecure configurations. These types of deep static-analysis findings are a core focus of the advanced analysis engine in **Shannon Pro**.
+- **What Dapper Lite Does Not Cover**: This list is not exhaustive of all potential security risks. Dapper Lite's "proof-by-exploitation" model means it will not report on issues it cannot actively exploit, such as vulnerable third-party libraries or insecure configurations. These types of deep static-analysis findings are a core focus of the advanced analysis engine in **Dapper Pro**.
 
 #### **5. Cost & Performance**
 
@@ -476,18 +487,18 @@ Shannon is designed for legitimate security auditing purposes only.
 
 #### **6. Windows Antivirus False Positives**
 
-Windows Defender may flag files in `xben-benchmark-results/` or `deliverables/` as malware. These are false positives caused by exploit code in the reports. Add an exclusion for the Shannon directory in Windows Defender, or use Docker/WSL2.
+Windows Defender may flag files in `xben-benchmark-results/` or `deliverables/` as malware. These are false positives caused by exploit code in the reports. Add an exclusion for the Dapper directory in Windows Defender, or use Docker/WSL2.
 
 
 ## 📜 License
 
-Shannon Lite is released under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
+Dapper Lite is released under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
 
-Shannon is open source (AGPL v3). This license allows you to:
+Dapper is open source (AGPL v3). This license allows you to:
 - Use it freely for all internal security testing.
 - Modify the code privately for internal use without sharing your changes.
 
-The AGPL's sharing requirements primarily apply to organizations offering Shannon as a public or managed service (such as a SaaS platform). In those specific cases, any modifications made to the core software must be open-sourced.
+The AGPL's sharing requirements primarily apply to organizations offering Dapper as a public or managed service (such as a SaaS platform). In those specific cases, any modifications made to the core software must be open-sourced.
 
 
 ## 👥 Community & Support
@@ -511,15 +522,15 @@ Issues are welcome for bug reports and feature requests.
 
 ## 💬 Get in Touch
 
-### Interested in Shannon Pro?
+### Interested in Dapper Pro?
 
-Shannon Pro is designed for organizations serious about application security. It offers enterprise-grade features, dedicated support, and seamless CI/CD integration, all powered by our most advanced LLM-based analysis engine. Find and fix complex vulnerabilities deep in your codebase before they ever reach production.
+Dapper Pro is designed for organizations serious about application security. It offers enterprise-grade features, dedicated support, and seamless CI/CD integration, all powered by our most advanced LLM-based analysis engine. Find and fix complex vulnerabilities deep in your codebase before they ever reach production.
 
 For a detailed breakdown of features, technical differences, and enterprise use cases, see our [complete comparison guide](./SHANNON-PRO.md).
 
 <p align="center">
   <a href="https://docs.google.com/forms/d/e/1FAIpQLSf-cPZcWjlfBJ3TCT8AaWpf8ztsw3FaHzJE4urr55KdlQs6cQ/viewform?usp=header" target="_blank">
-    <img src="https://img.shields.io/badge/📋%20Express%20Interest%20in%20Shannon%20Pro-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Express Interest">
+    <img src="https://img.shields.io/badge/📋%20Express%20Interest%20in%20Dapper%20Pro-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Express Interest">
   </a>
 </p>
 

@@ -17,15 +17,15 @@ export const displaySplashScreen = async (): Promise<void> => {
     const packageJson = (await fs.readJSON(packagePath)) as { version?: string };
     const version = packageJson.version || '1.0.0';
 
-    // Create the main SHANNON ASCII art
-    const shannonText = figlet.textSync('SHANNON', {
+    // Create the main DAPPER ASCII art
+    const dapperText = figlet.textSync('DAPPER', {
       font: 'ANSI Shadow',
       horizontalLayout: 'default',
       verticalLayout: 'default',
     });
 
-    // Apply golden gradient to SHANNON
-    const gradientShannon = gradient(['#F4C542', '#FFD700'])(shannonText);
+    // Apply golden gradient to DAPPER
+    const gradientDapper = gradient(['#F4C542', '#FFD700'])(dapperText);
 
     // Create minimal tagline with styling
     const tagline = chalk.bold.white('AI Penetration Testing Framework');
@@ -33,7 +33,7 @@ export const displaySplashScreen = async (): Promise<void> => {
 
     // Build the complete splash content
     const content = [
-      gradientShannon,
+      gradientDapper,
       '',
       chalk.bold.cyan('                 ╔════════════════════════════════════╗'),
       chalk.bold.cyan('                 ║') + '  ' + tagline + '  ' + chalk.bold.cyan('║'),
@@ -79,7 +79,7 @@ export const displaySplashScreen = async (): Promise<void> => {
   } catch (error) {
     // Fallback to simple splash if anything fails
     const errMsg = error instanceof Error ? error.message : String(error);
-    console.log(chalk.cyan.bold('\n🚀 SHANNON - AI Penetration Testing Framework\n'));
+    console.log(chalk.cyan.bold('\n🚀 DAPPER - AI Penetration Testing Framework\n'));
     console.log(chalk.yellow('⚠️  Could not load full splash screen:', errMsg));
     console.log('');
   }
