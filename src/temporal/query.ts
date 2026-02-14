@@ -6,7 +6,7 @@
 // as published by the Free Software Foundation.
 
 /**
- * Temporal query tool for inspecting Shannon workflow progress.
+ * Temporal query tool for inspecting Dapper workflow progress.
  *
  * Queries a running or completed workflow and displays its state.
  *
@@ -52,12 +52,12 @@ interface PipelineProgress {
 }
 
 function showUsage(): void {
-  console.log(chalk.cyan.bold('\nShannon Temporal Query Tool'));
+  console.log(chalk.cyan.bold('\nDapper Temporal Query Tool'));
   console.log(chalk.gray('Query progress of a running workflow\n'));
   console.log(chalk.yellow('Usage:'));
   console.log('  node dist/temporal/query.js <workflowId>\n');
   console.log(chalk.yellow('Examples:'));
-  console.log('  node dist/temporal/query.js shannon-1704672000000\n');
+  console.log('  node dist/temporal/query.js dapper-1704672000000\n');
 }
 
 function getStatusColor(status: string): string {

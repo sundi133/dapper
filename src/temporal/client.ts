@@ -6,7 +6,7 @@
 // as published by the Free Software Foundation.
 
 /**
- * Temporal client for starting Shannon pentest pipeline workflows.
+ * Temporal client for starting Dapper pentest pipeline workflows.
  *
  * Starts a workflow and optionally waits for completion with progress polling.
  *
@@ -19,7 +19,7 @@
  *   --config <path>       Configuration file path
  *   --output <path>       Output directory for audit logs
  *   --pipeline-testing    Use minimal prompts for fast testing
- *   --workflow-id <id>    Custom workflow ID (default: shannon-<timestamp>)
+ *   --workflow-id <id>    Custom workflow ID (default: dapper-<timestamp>)
  *   --wait                Wait for workflow completion with progress polling
  *
  * Environment:
@@ -40,7 +40,7 @@ dotenv.config();
 const PROGRESS_QUERY = 'getProgress';
 
 function showUsage(): void {
-  console.log(chalk.cyan.bold('\nShannon Temporal Client'));
+  console.log(chalk.cyan.bold('\nDapper Temporal Client'));
   console.log(chalk.gray('Start a pentest pipeline workflow\n'));
   console.log(chalk.yellow('Usage:'));
   console.log(
@@ -51,7 +51,7 @@ function showUsage(): void {
   console.log('  --output <path>       Output directory for audit logs');
   console.log('  --pipeline-testing    Use minimal prompts for fast testing');
   console.log(
-    '  --workflow-id <id>    Custom workflow ID (default: shannon-<timestamp>)'
+    '  --workflow-id <id>    Custom workflow ID (default: dapper-<timestamp>)'
   );
   console.log('  --wait                Wait for workflow completion with progress polling\n');
   console.log(chalk.yellow('Examples:'));
@@ -135,7 +135,7 @@ async function startPipeline(): Promise<void> {
 
   try {
     const hostname = sanitizeHostname(webUrl);
-    const workflowId = customWorkflowId || `${hostname}_shannon-${Date.now()}`;
+    const workflowId = customWorkflowId || `${hostname}_dapper-${Date.now()}`;
 
     const input: PipelineInput = {
       webUrl,
@@ -169,7 +169,7 @@ async function startPipeline(): Promise<void> {
     const handle = await client.workflow.start<(input: PipelineInput) => Promise<PipelineState>>(
       'pentestPipelineWorkflow',
       {
-        taskQueue: 'shannon-pipeline',
+        taskQueue: 'dapper-pipeline',
         workflowId,
         args: [input],
       }
@@ -178,8 +178,8 @@ async function startPipeline(): Promise<void> {
     if (!waitForCompletion) {
       console.log(chalk.bold('Monitor progress:'));
       console.log(chalk.white('  Web UI:  ') + chalk.blue(`http://localhost:8233/namespaces/default/workflows/${workflowId}`));
-      console.log(chalk.white('  Logs:    ') + chalk.gray(`./shannon logs ID=${workflowId}`));
-      console.log(chalk.white('  Query:   ') + chalk.gray(`./shannon query ID=${workflowId}`));
+      console.log(chalk.white('  Logs:    ') + chalk.gray(`./dapper logs ID=${workflowId}`));
+      console.log(chalk.white('  Query:   ') + chalk.gray(`./dapper query ID=${workflowId}`));
       console.log();
       console.log(chalk.bold('Output:'));
       console.log(chalk.white('  Reports: ') + chalk.cyan(outputDir));

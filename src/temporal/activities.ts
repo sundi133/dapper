@@ -5,7 +5,7 @@
 // as published by the Free Software Foundation.
 
 /**
- * Temporal activities for Shannon agent execution.
+ * Temporal activities for Dapper agent execution.
  *
  * Each activity wraps a single agent execution with:
  * - Heartbeat loop (2s interval) to signal worker liveness

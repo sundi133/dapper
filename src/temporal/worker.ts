@@ -6,9 +6,9 @@
 // as published by the Free Software Foundation.
 
 /**
- * Temporal worker for Shannon pentest pipeline.
+ * Temporal worker for Dapper pentest pipeline.
  *
- * Polls the 'shannon-pipeline' task queue and executes activities.
+ * Polls the 'dapper-pipeline' task queue and executes activities.
  * Handles up to 25 concurrent activities to support multiple parallel workflows.
  *
  * Usage:
@@ -48,7 +48,7 @@ async function runWorker(): Promise<void> {
     namespace: 'default',
     workflowBundle,
     activities,
-    taskQueue: 'shannon-pipeline',
+    taskQueue: 'dapper-pipeline',
     maxConcurrentActivityTaskExecutions: 25, // Support multiple parallel workflows (5 agents × ~5 workflows)
   });
 
@@ -61,8 +61,8 @@ async function runWorker(): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  console.log(chalk.green('Shannon worker started'));
-  console.log(chalk.gray('Task queue: shannon-pipeline'));
+  console.log(chalk.green('Dapper worker started'));
+  console.log(chalk.gray('Task queue: dapper-pipeline'));
   console.log(chalk.gray('Press Ctrl+C to stop\n'));
 
   try {

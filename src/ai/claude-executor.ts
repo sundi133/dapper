@@ -16,7 +16,7 @@ import { formatTimestamp } from '../utils/formatting.js';
 import { createGitCheckpoint, commitGitSuccess, rollbackGitWorkspace, getGitCommitHash } from '../utils/git-manager.js';
 import { AGENT_VALIDATORS, MCP_AGENT_MAPPING } from '../constants.js';
 import { AuditSession } from '../audit/index.js';
-import { createShannonHelperServer } from '../../mcp-server/dist/index.js';
+import { createDapperHelperServer } from '../../mcp-server/dist/index.js';
 import type { SessionMetadata } from '../audit/utils.js';
 import { getPromptNameForAgent } from '../types/agents.js';
 import type { AgentName } from '../types/index.js';
@@ -28,7 +28,7 @@ import { createAuditLogger } from './audit-logger.js';
 import { getActualModelName } from './router-utils.js';
 
 declare global {
-  var SHANNON_DISABLE_LOADER: boolean | undefined;
+  var DAPPER_DISABLE_LOADER: boolean | undefined;
 }
 
 export interface ClaudePromptResult {
@@ -53,17 +53,17 @@ interface StdioMcpServer {
   env: Record<string, string>;
 }
 
-type McpServer = ReturnType<typeof createShannonHelperServer> | StdioMcpServer;
+type McpServer = ReturnType<typeof createDapperHelperServer> | StdioMcpServer;
 
 // Configures MCP servers for agent execution, with Docker-specific Chromium handling
 function buildMcpServers(
   sourceDir: string,
   agentName: string | null
 ): Record<string, McpServer> {
-  const shannonHelperServer = createShannonHelperServer(sourceDir);
+  const dapperHelperServer = createDapperHelperServer(sourceDir);
 
   const mcpServers: Record<string, McpServer> = {
-    'shannon-helper': shannonHelperServer,
+    'dapper-helper': dapperHelperServer,
   };
 
   if (agentName) {
@@ -76,7 +76,7 @@ function buildMcpServers(
       const userDataDir = `/tmp/${playwrightMcpName}`;
 
       // Docker uses system Chromium; local dev uses Playwright's bundled browsers
-      const isDocker = process.env.SHANNON_DOCKER === 'true';
+      const isDocker = process.env.DAPPER_DOCKER === 'true';
 
       const mcpArgs: string[] = [
         '@playwright/mcp@latest',
@@ -211,7 +211,7 @@ export async function runClaudePrompt(
   const execContext = detectExecutionContext(description);
   const progress = createProgressManager(
     { description, useCleanOutput: execContext.useCleanOutput },
-    global.SHANNON_DISABLE_LOADER ?? false
+    global.DAPPER_DISABLE_LOADER ?? false
   );
   const auditLogger = createAuditLogger(auditSession);
 
@@ -351,7 +351,7 @@ async function processMessageStream(
   for await (const message of query({ prompt: fullPrompt, options })) {
     // Heartbeat logging when loader is disabled
     const now = Date.now();
-    if (global.SHANNON_DISABLE_LOADER && now - lastHeartbeat > HEARTBEAT_INTERVAL) {
+    if (global.DAPPER_DISABLE_LOADER && now - lastHeartbeat > HEARTBEAT_INTERVAL) {
       console.log(chalk.blue(`    [${Math.floor((now - timer.startTime) / 1000)}s] ${description} running... (Turn ${turnCount})`));
       lastHeartbeat = now;
     }
