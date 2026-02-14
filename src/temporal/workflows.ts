@@ -132,6 +132,7 @@ export async function pentestPipelineWorkflow(
     webUrl: input.webUrl,
     repoPath: input.repoPath,
     workflowId,
+    ...(input.subDir !== undefined && { subDir: input.subDir }),
     ...(input.configPath !== undefined && { configPath: input.configPath }),
     ...(input.outputPath !== undefined && { outputPath: input.outputPath }),
     ...(input.pipelineTestingMode !== undefined && {

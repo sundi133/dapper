@@ -13,6 +13,7 @@ import type { Authentication, DistributedConfig } from '../types/config.js';
 interface PromptVariables {
   webUrl: string;
   repoPath: string;
+  subDir?: string;
   MCP_SERVER?: string;
 }
 
@@ -238,6 +239,12 @@ async function interpolateVariables(
         .replace(/{{SEED_DATA}}/g, 'None')
         .replace(/{{EXPLORATION_LIMITS}}/g, 'None')
         .replace(/{{API_SCHEMAS}}/g, 'None');
+    }
+
+    // Inject subdirectory focus instruction if provided
+    if (variables.subDir) {
+      const subDirInstruction = `\n\n<subdirectory-focus>\nIMPORTANT: Focus your source code analysis ONLY on the "${variables.subDir}" subdirectory within the repository at ${variables.repoPath}. When reading, searching, or analyzing source code, restrict your scope to files under "${variables.repoPath}/${variables.subDir}". You may still perform full-scope web/network testing against the target URL, but all code review and static analysis must be limited to this subdirectory.\n</subdirectory-focus>`;
+      result = subDirInstruction + '\n' + result;
     }
 
     // Validate that all placeholders have been replaced (excluding instructional text)

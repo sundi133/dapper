@@ -48,6 +48,7 @@ function showUsage(): void {
   );
   console.log(chalk.yellow('Options:'));
   console.log('  --config <path>       Configuration file path');
+  console.log('  --subdir <path>       Subdirectory within repo to focus analysis on');
   console.log('  --output <path>       Output directory for audit logs');
   console.log('  --pipeline-testing    Use minimal prompts for fast testing');
   console.log(
@@ -72,6 +73,7 @@ async function startPipeline(): Promise<void> {
   // Parse arguments
   let webUrl: string | undefined;
   let repoPath: string | undefined;
+  let subDir: string | undefined;
   let configPath: string | undefined;
   let outputPath: string | undefined;
   let displayOutputPath: string | undefined; // Host path for display purposes
@@ -85,6 +87,12 @@ async function startPipeline(): Promise<void> {
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('-')) {
         configPath = nextArg;
+        i++;
+      }
+    } else if (arg === '--subdir') {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        subDir = nextArg;
         i++;
       }
     } else if (arg === '--output') {
@@ -140,6 +148,7 @@ async function startPipeline(): Promise<void> {
     const input: PipelineInput = {
       webUrl,
       repoPath,
+      ...(subDir && { subDir }),
       ...(configPath && { configPath }),
       ...(outputPath && { outputPath }),
       ...(pipelineTestingMode && { pipelineTestingMode }),
@@ -154,6 +163,9 @@ async function startPipeline(): Promise<void> {
     console.log();
     console.log(chalk.white('  Target:     ') + chalk.cyan(webUrl));
     console.log(chalk.white('  Repository: ') + chalk.cyan(repoPath));
+    if (subDir) {
+      console.log(chalk.white('  Subdir:     ') + chalk.cyan(subDir));
+    }
     if (configPath) {
       console.log(chalk.white('  Config:     ') + chalk.cyan(configPath));
     }

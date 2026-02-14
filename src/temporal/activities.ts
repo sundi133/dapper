@@ -85,6 +85,7 @@ const HEARTBEAT_INTERVAL_MS = 2000; // Must be < heartbeatTimeout (10min product
 export interface ActivityInput {
   webUrl: string;
   repoPath: string;
+  subDir?: string;
   configPath?: string;
   outputPath?: string;
   pipelineTestingMode?: boolean;
@@ -112,6 +113,7 @@ async function runAgentActivity(
   const {
     webUrl,
     repoPath,
+    subDir,
     configPath,
     outputPath,
     pipelineTestingMode = false,
@@ -157,7 +159,7 @@ async function runAgentActivity(
     const promptName = getPromptNameForAgent(agentName);
     const prompt = await loadPrompt(
       promptName,
-      { webUrl, repoPath },
+      { webUrl, repoPath, ...(subDir && { subDir }) },
       distributedConfig,
       pipelineTestingMode
     );

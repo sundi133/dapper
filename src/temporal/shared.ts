@@ -5,6 +5,7 @@ import { defineQuery } from '@temporalio/workflow';
 export interface PipelineInput {
   webUrl: string;
   repoPath: string;
+  subDir?: string; // Subdirectory within repo to focus analysis on
   configPath?: string;
   outputPath?: string;
   pipelineTestingMode?: boolean;
