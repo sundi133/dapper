@@ -1,12 +1,6 @@
 > [!NOTE]
-> **[Dapper Lite achieves a 96.15% success rate on a hint-free, source-aware XBOW benchmark. &rarr;](https://github.com/KeygraphHQ/shannon/tree/main/xben-benchmark-results/README.md)**
-
 
 <div align="center">
-
-<a href="https://trendshift.io/repositories/15604" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15604" alt="KeygraphHQ%2Fshannon | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-<img src="./assets/shannon-screen.png?v=2" alt="Dapper Screen" width="100%">
 
 # Dapper is your fully autonomous AI pentester.
 
@@ -15,22 +9,18 @@ The Red Team to your vibe-coding Blue team. <br />
 Every Claude (coder) deserves their Dapper.
 
 ---
-
-[Website](https://keygraph.io) • [Discord](https://discord.gg/KAqzSHHpRt)
-
----
 </div>
 
 > [!TIP]
-> **Dapper is a fork of [Shannon](https://github.com/KeygraphHQ/shannon)** with advanced agents and enhanced capabilities.
+> **Dapper is a fork of [Dapper](https://github.com/KeygraphHQ/shannon)** with advanced agents and enhanced capabilities.
 >
-> While Shannon provides a solid foundation for AI-powered pentesting, Dapper extends this with:
+> While Drapper provides a solid foundation for AI-powered pentesting, Dapper extends this with:
 > - **Additional specialized agents** for more comprehensive vulnerability detection
 > - **Enhanced exploitation capabilities** across a broader range of attack vectors
 > - **Improved analysis techniques** for deeper code understanding
 > - **Extended tooling integration** for more thorough reconnaissance
 >
-> All improvements are built on Shannon's proven architecture while pushing the boundaries of autonomous security testing.
+> All improvements are built on Dapper's proven architecture while pushing the boundaries of autonomous security testing.
 
 ## 🎯 What is Dapper?
 
