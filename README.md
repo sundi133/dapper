@@ -12,7 +12,7 @@ Every Claude (coder) deserves their Dapper.
 </div>
 
 > [!TIP]
-> **Dapper is a fork of [Dapper](https://github.com/KeygraphHQ/shannon)** with advanced agents and enhanced capabilities.
+> **Dapper is a fork of [Shannon](https://github.com/KeygraphHQ/shannon)** with advanced agents and enhanced capabilities.
 >
 > While Drapper provides a solid foundation for AI-powered pentesting, Dapper extends this with:
 > - **Additional specialized agents** for more comprehensive vulnerability detection
@@ -43,12 +43,6 @@ Dapper closes this gap by acting as your on-demand whitebox pentester. It doesn'
 >
 > ➡️ **[Learn more about the Keygraph Platform](https://keygraph.io)**
 
-## 🎬 See Dapper in Action
-
-**Real Results**: Dapper discovered 20+ critical vulnerabilities in OWASP Juice Shop, including complete auth bypass and database exfiltration. [See full report →](sample-reports/shannon-report-juice-shop.md)
-
-![Demo](assets/shannon-action.gif)
-
 ## ✨ Features
 
 - **Fully Autonomous Operation**: Launch the pentest with a single command. The AI handles everything from advanced 2FA/TOTP logins (including sign in with Google) and browser navigation to the final report with zero intervention.
@@ -73,7 +67,6 @@ Dapper is available in two editions:
 > **White-box only.** Dapper Lite is designed for **white-box (source-available)** application security testing.
 > It expects access to your application's source code and repository layout.
 
-[See feature comparison](./SHANNON-PRO.md)
 ## 📑 Table of Contents
 
 - [What is Dapper?](#-what-is-dapper)
@@ -113,8 +106,8 @@ Dapper is available in two editions:
 
 ```bash
 # 1. Clone Dapper
-git clone https://github.com/KeygraphHQ/shannon.git
-cd shannon
+git clone https://github.com/sundi133/dapper.git
+cd dapper
 
 # 2. Configure credentials (choose one method)
 
@@ -330,8 +323,6 @@ See Dapper's capabilities in action with penetration test results from industry-
 - **Identified and exploited systemic authorization flaws (IDOR)** to access and modify any user's private data and shopping cart
 - **Discovered a Server-Side Request Forgery (SSRF)** vulnerability, enabling internal network reconnaissance
 
-📄 **[View Complete Report →](sample-reports/shannon-report-juice-shop.md)**
-
 ---
 
 #### 🔗 **c{api}tal API** • [GitHub](https://github.com/Checkmarx/capital)
@@ -347,8 +338,6 @@ See Dapper's capabilities in action with penetration test results from industry-
 - **Escalated a regular user to full administrator privileges** by exploiting a Mass Assignment vulnerability in the user profile update function
 - **Demonstrated high accuracy** by correctly confirming the application's robust XSS defenses, reporting zero false positives
 
-📄 **[View Complete Report →](sample-reports/shannon-report-capital-api.md)**
-
 ---
 
 #### 🚗 **OWASP crAPI** • [GitHub](https://github.com/OWASP/crAPI)
@@ -363,8 +352,6 @@ See Dapper's capabilities in action with penetration test results from industry-
 - **Achieved full database compromise via Injection attacks**, exfiltrating user credentials from the PostgreSQL database
 - **Executed a critical Server-Side Request Forgery (SSRF) attack** that successfully forwarded internal authentication tokens to an external service
 - **Demonstrated high accuracy** by correctly identifying the application's robust XSS defenses, reporting zero false positives
-
-📄 **[View Complete Report →](sample-reports/shannon-report-crapi.md)**
 
 ---
 
@@ -498,10 +485,6 @@ The AGPL's sharing requirements primarily apply to organizations offering Dapper
 **Contributing:** At this time, we’re not accepting external code contributions (PRs).  
 Issues are welcome for bug reports and feature requests.
 
-- 🐛 **Report bugs** via [GitHub Issues](https://github.com/KeygraphHQ/shannon/issues)
-- 💡 **Suggest features** in [Discussions](https://github.com/KeygraphHQ/shannon/discussions)
-- 💬 **Join our [Discord](https://discord.gg/KAqzSHHpRt)** for real-time community support
-
 ### Stay Connected
 
 - 🐦 **Twitter**: [@KeygraphHQ](https://twitter.com/KeygraphHQ)
@@ -516,8 +499,6 @@ Issues are welcome for bug reports and feature requests.
 
 Dapper Pro is designed for organizations serious about application security. It offers enterprise-grade features, dedicated support, and seamless CI/CD integration, all powered by our most advanced LLM-based analysis engine. Find and fix complex vulnerabilities deep in your codebase before they ever reach production.
 
-For a detailed breakdown of features, technical differences, and enterprise use cases, see our [complete comparison guide](./SHANNON-PRO.md).
-
 <p align="center">
   <a href="https://docs.google.com/forms/d/e/1FAIpQLSf-cPZcWjlfBJ3TCT8AaWpf8ztsw3FaHzJE4urr55KdlQs6cQ/viewform?usp=header" target="_blank">
     <img src="https://img.shields.io/badge/📋%20Express%20Interest%20in%20Dapper%20Pro-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Express Interest">
@@ -526,7 +507,7 @@ For a detailed breakdown of features, technical differences, and enterprise use 
 
 **Or contact us directly:**
 
-📧 **Email**: [shannon@keygraph.io](mailto:shannon@keygraph.io)
+📧 **Email**: [info@votal.ai](mailto:info@votal.ai)
 
 ---
 Report:
