@@ -34,14 +34,6 @@ Thanks to tools like Claude Code and Cursor, your team ships code non-stop. But 
 
 Dapper closes this gap by acting as your on-demand whitebox pentester. It doesn't just find potential issues. It executes real exploits, providing concrete proof of vulnerabilities. This lets you ship with confidence, knowing every build can be secured.
 
-> [!NOTE]
-> **From Autonomous Pentesting to Automated Compliance**
->
-> Dapper is a core component of the **Keygraph Security and Compliance Platform**.
->
-> While Dapper automates the critical task of penetration testing for your application, our broader platform automates your entire compliance journey—from evidence collection to audit readiness. We're building the "Rippling for Cybersecurity," a single platform to manage your security posture and streamline compliance frameworks like SOC 2 and HIPAA.
->
-> ➡️ **[Learn more about the Keygraph Platform](https://keygraph.io)**
 
 ## ✨ Features
 
@@ -438,11 +430,6 @@ This is not a passive scanner. The exploitation agents are designed to **activel
 
 Dapper is designed for legitimate security auditing purposes only.
 
-> [!CAUTION]
-> **You must have explicit, written authorization** from the owner of the target system before running Dapper.
->
-> Unauthorized scanning and exploitation of systems you do not own is illegal and can be prosecuted under laws such as the Computer Fraud and Abuse Act (CFAA). Keygraph is not responsible for any misuse of Dapper.
-
 #### **3. LLM & Automation Caveats**
 
 - **Verification is Required**: While significant engineering has gone into our "proof-by-exploitation" methodology to eliminate false positives, the underlying LLMs can still generate hallucinated or weakly-supported content in the final report. **Human oversight is essential** to validate the legitimacy and severity of all reported findings.
@@ -485,14 +472,6 @@ The AGPL's sharing requirements primarily apply to organizations offering Dapper
 **Contributing:** At this time, we’re not accepting external code contributions (PRs).  
 Issues are welcome for bug reports and feature requests.
 
-### Stay Connected
-
-- 🐦 **Twitter**: [@KeygraphHQ](https://twitter.com/KeygraphHQ)
-- 💼 **LinkedIn**: [Keygraph](https://linkedin.com/company/keygraph)
-- 🌐 **Website**: [keygraph.io](https://keygraph.io)
-
-
-
 ## 💬 Get in Touch
 
 ### Interested in Dapper Pro?
@@ -500,7 +479,7 @@ Issues are welcome for bug reports and feature requests.
 Dapper Pro is designed for organizations serious about application security. It offers enterprise-grade features, dedicated support, and seamless CI/CD integration, all powered by our most advanced LLM-based analysis engine. Find and fix complex vulnerabilities deep in your codebase before they ever reach production.
 
 <p align="center">
-  <a href="https://docs.google.com/forms/d/e/1FAIpQLSf-cPZcWjlfBJ3TCT8AaWpf8ztsw3FaHzJE4urr55KdlQs6cQ/viewform?usp=header" target="_blank">
+  <a href="https://votal.ai/contact/" target="_blank">
     <img src="https://img.shields.io/badge/📋%20Express%20Interest%20in%20Dapper%20Pro-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Express Interest">
   </a>
 </p>
