@@ -489,6 +489,6 @@ Dapper Pro is designed for organizations serious about application security. It 
 📧 **Email**: [info@votal.ai](mailto:info@votal.ai)
 
 ---
-Report:
-node scripts/export-findings-csv.js repos/votal.ai/deliverables --model claude-opus-4-6
+Reports command:
+node scripts/export-findings-csv.js repos/DVWA/deliverables --model claude-opus-4-6 --max-turns 100
 
