@@ -1,0 +1,46 @@
+authentication:
+  login_type: api
+  login_url: "https://vampi-production-8cbb.up.railway.app/users/v1/login"
+  credentials:
+    username: "testuser"
+    password: "testpass"
+  login_flow:
+    - "POST to /users/v1/login with JSON body {\"username\": \"$username\", \"password\": \"$password\"}"
+    - "Extract the auth_token from the response JSON"
+    - "Set Authorization header as 'Bearer <auth_token>' for subsequent requests"
+  success_condition:
+    type: url_contains
+    value: "/users/v1/login"
+
+accounts:
+  - role: user
+    username: "testuser3"
+    password: "testpass3"
+  - role: user2
+    username: "testuser2"
+    password: "testpass2"
+  - role: admin
+    username: "admin"
+    password: "pass1"
+
+schemas:
+  openapi_urls:
+    - "https://vampi-production-8cbb.up.railway.app/openapi.json"
+
+seed_data:
+  - "Register user name1 with password pass1 and email name1@example.com via POST /users/v1/register"
+  - "Register user name2 with password pass2 and email name2@example.com via POST /users/v1/register"
+  - "Initialize the database via GET /createdb before testing"
+
+rules:
+  avoid:
+    - description: "Do not reinitialize the database during testing"
+      type: path
+      url_path: "/createdb"
+  focus:
+    - description: "Focus on user management endpoints"
+      type: path
+      url_path: "/users/v1/*"
+    - description: "Focus on book endpoints"
+      type: path
+      url_path: "/books/v1/*"

@@ -124,8 +124,8 @@ COPY . .
 RUN cd mcp-server && npm run build && cd .. && npm run build
 
 # Remove devDependencies after build to reduce image size
-RUN npm prune --production && \
-    cd mcp-server && npm prune --production
+RUN npm prune --omit=dev && \
+    npm --prefix mcp-server prune --omit=dev
 
 # Create directories for session data and ensure proper permissions
 RUN mkdir -p /app/sessions /app/deliverables /app/repos /app/configs && \
