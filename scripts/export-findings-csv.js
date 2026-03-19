@@ -8,7 +8,7 @@
  * or assumptions about file format.
  *
  * Usage:
- *   node export-findings-csv.js <deliverables-dir> [output.csv] [--model <model>] [--max-turns <n>]
+ *   node export-findings-csv.js <deliverables-dir> [output.csv] [--model <model>] [--max-turns <n>] [--reuse-json]
  *
  * Env:
  *   ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN must be set.
@@ -60,6 +60,7 @@ const deliverablesDir = positional[0] || 'deliverables';
 const outputPath = positional[1] || path.join(deliverablesDir, 'findings.csv');
 const model = flag('model') || 'claude-sonnet-4-5-20250929';
 const maxTurns = parseInt(flag('max-turns') || '120', 10);
+const reuseJson = args.includes('--reuse-json');
 
 // ── Validation ──────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ if (!fs.existsSync(deliverablesDir)) {
   process.exit(1);
 }
 
-if (!process.env.ANTHROPIC_API_KEY && !process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+if (!reuseJson && !process.env.ANTHROPIC_API_KEY && !process.env.CLAUDE_CODE_OAUTH_TOKEN) {
   logError('Missing ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.');
   process.exit(1);
 }
@@ -87,6 +88,7 @@ logInfo(`Output CSV   : ${absOutput}`);
 logInfo(`JSON interim : ${jsonOutputPath}`);
 logInfo(`Model        : ${model}`);
 logInfo(`Max turns    : ${maxTurns}`);
+logInfo(`Reuse JSON   : ${reuseJson ? 'yes' : 'no'}`);
 console.log('');
 
 // ── Agent instructions (appended to claude_code preset) ─────────────────────
@@ -132,7 +134,9 @@ You have a limited turn budget. DO NOT waste turns reading one file at a time.
    - exploitation_hypothesis: How an attacker would exploit this
    - confidence: Confidence level of the finding
    - externally_exploitable: Whether externally exploitable (true/false/unknown)
-   - remediation: Recommended fix
+   - cwe: Compact CWE summary, e.g. "CWE-89: SQL Injection" or "CWE-639: IDOR; CWE-862: Missing Authorization"
+   - cwe_names: CWE short name(s) matching cwe_ids
+   - remediation_suggestions: Actionable remediation guidance for engineers. If remediation is unavailable, synthesize concrete suggestions.
    - evidence_snippet: Key evidence text (max 300 chars)
    - exploit_result: What happened when exploited
    - affected_endpoint: Specific affected endpoint
@@ -164,6 +168,7 @@ You have a limited turn budget. DO NOT waste turns reading one file at a time.
 - BE EFFICIENT. Batch file reads using bash. Do not read one file per turn.
 - Merge information: if the same finding ID appears in multiple files, combine all fields into one record.
 - Do NOT invent data. If a field is not present, use empty string "".
+- When a CWE is reasonably inferable from the vulnerability type, exploit path, or missing defense, populate cwe_ids and cwe_names.
 - The developer_verification_steps field is REQUIRED for every finding. Generate it based on available context.
 - After writing the JSON output file, output a brief summary of how many findings you found.
 `;
@@ -418,6 +423,286 @@ const loadFindings = () => {
   return null;
 };
 
+const CWE_RULES = [
+  {
+    id: 'CWE-89',
+    name: 'Improper Neutralization of Special Elements used in an SQL Command',
+    patterns: ['sql_injection', 'sql injection', 'union select', 'sqlite', 'database error'],
+    remediation:
+      'Use parameterized queries or ORM-bound parameters for all database access. Reject or safely encode attacker-controlled input before it reaches SQL construction.',
+  },
+  {
+    id: 'CWE-79',
+    name: 'Improper Neutralization of Input During Web Page Generation',
+    patterns: ['xss', 'cross-site scripting', 'cross site scripting', 'script injection'],
+    remediation:
+      'Apply context-aware output encoding, validate and sanitize untrusted input, and enforce a restrictive Content-Security-Policy to reduce script injection impact.',
+  },
+  {
+    id: 'CWE-918',
+    name: 'Server-Side Request Forgery (SSRF)',
+    patterns: ['ssrf', 'server-side request forgery', 'server side request forgery'],
+    remediation:
+      'Strictly validate outbound destinations against an allowlist, block internal address ranges and metadata endpoints, and route outbound requests through a hardened proxy.',
+  },
+  {
+    id: 'CWE-639',
+    name: 'Authorization Bypass Through User-Controlled Key',
+    patterns: ['bola', 'idor', 'book_title', 'username (path parameter)', 'broken object level authorization'],
+    remediation:
+      'Authorize access using the authenticated user context on every object lookup. Never trust path, query, or body identifiers alone to decide ownership.',
+  },
+  {
+    id: 'CWE-862',
+    name: 'Missing Authorization',
+    patterns: ['missing authorization', 'no ownership verification', 'authorization not checked', 'admin-only', 'privilege escalation'],
+    remediation:
+      'Add explicit authorization checks server-side for each privileged action and deny requests that are not permitted for the authenticated principal.',
+  },
+  {
+    id: 'CWE-287',
+    name: 'Improper Authentication',
+    patterns: ['authentication_bypass', 'auth bypass', 'improper authentication', 'forged token'],
+    remediation:
+      'Require robust authentication for protected operations, validate tokens securely, and reject forged or malformed credentials before business logic executes.',
+  },
+  {
+    id: 'CWE-321',
+    name: 'Use of Hard-coded Cryptographic Key',
+    patterns: ['hardcoded secret', 'hardcoded secret_key', 'hardcoded cryptographic', 'jwt secret key hardcoded', 'secret key hardcoded'],
+    remediation:
+      'Remove hard-coded cryptographic material from source control. Load high-entropy secrets from a secure secret manager or environment and support rotation.',
+  },
+  {
+    id: 'CWE-798',
+    name: 'Use of Hard-coded Credentials',
+    patterns: ['default_credentials', 'default credentials', 'hardcoded credentials', 'admin:pass1'],
+    remediation:
+      'Eliminate default or embedded credentials. Generate unique bootstrap credentials per environment and require immediate rotation on first use.',
+  },
+  {
+    id: 'CWE-256',
+    name: 'Plaintext Storage of a Password',
+    patterns: ['plaintext_password_storage', 'plaintext passwords', 'password hashing', 'stored as plaintext'],
+    remediation:
+      'Hash passwords with a modern password hashing algorithm such as Argon2id or bcrypt, add per-password salt, and avoid storing recoverable plaintext passwords.',
+  },
+  {
+    id: 'CWE-306',
+    name: 'Missing Authentication for Critical Function',
+    patterns: ['unauthenticated_destructive_operation', 'no authentication required', 'without any authentication', 'createdb'],
+    remediation:
+      'Require strong authentication before invoking administrative or destructive actions, and remove development-only maintenance endpoints from production.',
+  },
+  {
+    id: 'CWE-915',
+    name: 'Improperly Controlled Modification of Dynamically-Determined Object Attributes',
+    patterns: ['mass_assignment', 'mass assignment', 'admin:true', 'improperly controlled modification'],
+    remediation:
+      'Use an explicit allowlist of writable fields for object creation and update operations. Ignore or reject privilege-bearing fields supplied by clients.',
+  },
+  {
+    id: 'CWE-489',
+    name: 'Active Debug Code',
+    patterns: ['debug_mode_enabled', 'debug mode', 'werkzeug debugger', 'debug_endpoint'],
+    remediation:
+      'Disable debug tooling and developer-only endpoints in production builds. Gate any diagnostics behind secure environment checks and authentication.',
+  },
+  {
+    id: 'CWE-209',
+    name: 'Generation of Error Message Containing Sensitive Information',
+    patterns: ['verbose_error_messages', 'stack trace', 'schema_disclosure', 'debug_mode_stack_traces', 'validation errors', 'authentication_error_disclosure'],
+    remediation:
+      'Return generic client-facing errors and log detailed diagnostic context server-side only. Avoid exposing stack traces, schema details, and framework internals.',
+  },
+  {
+    id: 'CWE-703',
+    name: 'Improper Check or Handling of Exceptional Conditions',
+    patterns: ['missing_exception_handling', 'bare_except_block', 'bare except', 'try/except'],
+    remediation:
+      'Handle expected exceptions explicitly, fail closed on unexpected errors, and return correct HTTP status codes while preserving server-side logs for debugging.',
+  },
+  {
+    id: 'CWE-307',
+    name: 'Improper Restriction of Excessive Authentication Attempts',
+    patterns: ['missing_rate_limiting', 'brute force', 'rate limiting', 'credential stuffing'],
+    remediation:
+      'Apply rate limiting, lockout or progressive backoff controls on authentication and other abuse-prone endpoints, and alert on repeated failures.',
+  },
+  {
+    id: 'CWE-799',
+    name: 'Improper Control of Interaction Frequency',
+    patterns: ['missing_rate_limiting_registration', 'unlimited', 'registration'],
+    remediation:
+      'Limit request rates for registration and other public workflows, add abuse detection, and require additional verification for suspicious activity.',
+  },
+  {
+    id: 'CWE-613',
+    name: 'Insufficient Session Expiration',
+    patterns: ['missing_token_revocation', 'no_logout', 'unlimited_concurrent_sessions', 'missing_token_binding', 'token revocation', 'concurrent sessions'],
+    remediation:
+      'Track active sessions server-side, revoke tokens on logout or sensitive account changes, enforce session lifetimes, and limit concurrent active sessions.',
+  },
+  {
+    id: 'CWE-294',
+    name: 'Authentication Bypass by Capture-replay',
+    patterns: ['token_replay', 'token replay'],
+    remediation:
+      'Bind tokens to strong session context where appropriate, shorten token lifetime, rotate refresh tokens, and detect replay of previously seen credentials.',
+  },
+  {
+    id: 'CWE-525',
+    name: 'Information Exposure Through Browser Caching',
+    patterns: ['missing_cache_control_headers', 'cache-control', 'cache control'],
+    remediation:
+      'Set Cache-Control: no-store for sensitive responses and ensure downstream proxies and browsers do not persist authenticated content.',
+  },
+  {
+    id: 'CWE-208',
+    name: 'Observable Timing Discrepancy',
+    patterns: ['timing_attack', 'timing attack', 'timing discrepancy'],
+    remediation:
+      'Use constant-time comparisons for sensitive values and make authentication failure paths perform equivalent work to reduce timing side channels.',
+  },
+  {
+    id: 'CWE-367',
+    name: 'Time-of-check Time-of-use (TOCTOU) Race Condition',
+    patterns: ['race_condition_toctou', 'race condition', 'toctou'],
+    remediation:
+      'Make state validation and mutation atomic using transactions, row-level locking, or idempotency controls so concurrent requests cannot bypass invariants.',
+  },
+  {
+    id: 'CWE-1021',
+    name: 'Improper Restriction of Rendered UI Layers or Frames',
+    patterns: ['clickjacking', 'frame-options', 'x-frame-options'],
+    remediation:
+      'Set X-Frame-Options or frame-ancestors in CSP and ensure sensitive pages cannot be embedded by untrusted origins.',
+  },
+  {
+    id: 'CWE-319',
+    name: 'Cleartext Transmission of Sensitive Information',
+    patterns: ['weak_tls', 'missing_application_tls', 'insecure_token_delivery', 'http-only', 'unencrypted channel'],
+    remediation:
+      'Enforce TLS end to end for all sensitive traffic, redirect HTTP to HTTPS, and avoid transmitting secrets or tokens over cleartext channels.',
+  },
+  {
+    id: 'CWE-312',
+    name: 'Cleartext Storage of Sensitive Information',
+    patterns: ['unencrypted_database_storage', 'encryption at rest', 'plaintext file', 'database.db'],
+    remediation:
+      'Encrypt sensitive data at rest, protect encryption keys separately from the data store, and minimize direct filesystem exposure to stored secrets.',
+  },
+  {
+    id: 'CWE-200',
+    name: 'Exposure of Sensitive Information to an Unauthorized Actor',
+    patterns: ['information_disclosure', 'sensitive_data_exposure', 'user_enumeration', 'api_spec_exposure', 'header_leakage', 'security_posture_leak'],
+    remediation:
+      'Limit sensitive data returned to unauthenticated or unauthorized users, remove unnecessary disclosure endpoints, and minimize metadata leaked in responses.',
+  },
+  {
+    id: 'CWE-204',
+    name: 'Observable Response Discrepancy',
+    patterns: ['username_enumeration', 'authentication_error_disclosure', 'different error messages'],
+    remediation:
+      'Normalize authentication and validation error messages so success and failure cases do not disclose whether usernames, emails, or resources exist.',
+  },
+  {
+    id: 'CWE-650',
+    name: 'Trusting HTTP Permission Methods on the Server Side',
+    patterns: ['http_verb_tampering', 'method override', 'x-http-method-override'],
+    remediation:
+      'Reject method-override headers unless explicitly required, and enforce authorization and routing based on the effective HTTP method server-side.',
+  },
+];
+
+const collapseText = (...parts) =>
+  parts
+    .flat()
+    .filter(Boolean)
+    .map((part) => (Array.isArray(part) ? part.join(' ') : String(part)))
+    .join(' ')
+    .toLowerCase();
+
+const hasValue = (value) =>
+  value !== null &&
+  value !== undefined &&
+  !(typeof value === 'string' && value.trim() === '') &&
+  !(Array.isArray(value) && value.length === 0);
+
+const inferCweMappings = (finding) => {
+  const text = collapseText(
+    finding.type,
+    finding.missing_defense,
+    finding.attack_path,
+    finding.exploitation_hypothesis,
+    finding.notes,
+    finding.report_section,
+    finding.source_endpoint,
+    finding.parameter
+  );
+
+  return CWE_RULES.filter((rule) =>
+    rule.patterns.some((pattern) => text.includes(pattern.toLowerCase()))
+  );
+};
+
+const buildRemediation = (finding, mappings) => {
+  if (hasValue(finding.remediation)) {
+    return String(finding.remediation).trim();
+  }
+
+  const snippets = [...new Set(mappings.map((mapping) => mapping.remediation).filter(Boolean))];
+  if (snippets.length > 0) {
+    return snippets.slice(0, 3).join(' ');
+  }
+
+  return 'Review the affected endpoint and code path, add missing authorization and validation checks, remove unsafe debug or disclosure behavior, and verify the fix with a targeted regression test.';
+};
+
+const normalizeMultiValueField = (value) => {
+  if (!hasValue(value)) return '';
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean).join('; ');
+  }
+  return String(value);
+};
+
+const enrichFindings = (findings) => findings.map((finding) => {
+  const { remediation: _ignoredRemediation, cwe_ids: _ignoredCweIds, ...rest } = finding;
+  const mappings = inferCweMappings(finding);
+  const existingIds = hasValue(finding.cwe_ids)
+    ? String(finding.cwe_ids).split(/[;,]/).map((part) => part.trim()).filter(Boolean)
+    : [];
+  const existingNames = hasValue(finding.cwe_names)
+    ? String(finding.cwe_names).split(/[;,]/).map((part) => part.trim()).filter(Boolean)
+    : [];
+
+  const cweIds = existingIds.length > 0
+    ? existingIds
+    : mappings.map((mapping) => mapping.id);
+  const cweNames = existingNames.length > 0
+    ? existingNames
+    : mappings.map((mapping) => mapping.name);
+  const remediation = buildRemediation(finding, mappings);
+  const compactCwe = [...new Set(
+    cweIds.map((id, index) => {
+      const name = cweNames[index] || '';
+      return name ? `${id}: ${name}` : id;
+    })
+  )].join('; ');
+
+  return {
+    ...rest,
+    source_file: normalizeMultiValueField(finding.source_file),
+    original_ids: normalizeMultiValueField(finding.original_ids),
+    cwe: compactCwe,
+    cwe_names: [...new Set(cweNames)].join('; '),
+    remediation_suggestions: hasValue(finding.remediation_suggestions)
+      ? String(finding.remediation_suggestions).trim()
+      : remediation,
+  };
+});
+
 const findingsToCSV = (findings) => {
   const keySet = new Set();
   for (const f of findings) {
@@ -430,7 +715,7 @@ const findingsToCSV = (findings) => {
     'id', 'type', 'severity', 'status',
     'source_endpoint', 'parameter', 'code_location',
     'missing_defense', 'attack_path', 'exploitation_hypothesis',
-    'confidence', 'externally_exploitable', 'remediation',
+    'confidence', 'externally_exploitable', 'cwe', 'cwe_names', 'remediation_suggestions',
     'developer_verification_steps',
     'evidence_snippet', 'exploit_result', 'affected_endpoint',
     'attack_steps_summary', 'report_section', 'source_file', 'notes',
@@ -465,10 +750,14 @@ const findingsToCSV = (findings) => {
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
-logInfo('Starting agentic analysis...');
-console.log('');
-
-await runAgent();
+if (reuseJson && fs.existsSync(jsonOutputPath)) {
+  logInfo(`Skipping agent run and reusing existing JSON: ${jsonOutputPath}`);
+  console.log('');
+} else {
+  logInfo('Starting agentic analysis...');
+  console.log('');
+  await runAgent();
+}
 
 const findings = loadFindings();
 
@@ -480,7 +769,8 @@ if (!findings || findings.length === 0) {
   process.exit(1);
 }
 
-const csv = findingsToCSV(findings);
+const enrichedFindings = enrichFindings(findings);
+const csv = findingsToCSV(enrichedFindings);
 fs.writeFileSync(absOutput, csv);
 
 console.log('');
