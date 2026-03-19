@@ -11,17 +11,6 @@ Every Claude (coder) deserves their Dapper.
 ---
 </div>
 
-> [!TIP]
-> **Dapper is a fork of [Shannon](https://github.com/KeygraphHQ/shannon)** with advanced agents and enhanced capabilities.
->
-> While Drapper provides a solid foundation for AI-powered pentesting, Dapper extends this with:
-> - **Additional specialized agents** for more comprehensive vulnerability detection
-> - **Enhanced exploitation capabilities** across a broader range of attack vectors
-> - **Improved analysis techniques** for deeper code understanding
-> - **Extended tooling integration** for more thorough reconnaissance
->
-> All improvements are built on Dapper's proven architecture while pushing the boundaries of autonomous security testing.
-
 ## 🎯 What is Dapper?
 
 Dapper is an AI pentester that delivers actual exploits, not just alerts.
@@ -491,4 +480,15 @@ Dapper Pro is designed for organizations serious about application security. It 
 ---
 Reports command:
 node scripts/export-findings-csv.js repos/DVWA/deliverables --model claude-opus-4-6 --max-turns 100
+
+> [!TIP]
+> **Dapper is a fork of [Shannon](https://github.com/KeygraphHQ/shannon)** with advanced agents and enhanced capabilities.
+>
+> While Drapper provides a solid foundation for AI-powered pentesting, Dapper extends this with:
+> - **Additional specialized agents** for more comprehensive vulnerability detection
+> - **Enhanced exploitation capabilities** across a broader range of attack vectors
+> - **Improved analysis techniques** for deeper code understanding
+> - **Extended tooling integration** for more thorough reconnaissance
+>
+> All improvements are built on Dapper's proven architecture while pushing the boundaries of autonomous security testing.
 

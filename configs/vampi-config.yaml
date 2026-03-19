@@ -7,7 +7,7 @@ authentication:
   login_flow:
     - "POST to /users/v1/login with JSON body {\"username\": \"$username\", \"password\": \"$password\"}"
     - "Extract the auth_token from the response JSON"
-    - "Set Authorization header as 'Bearer <auth_token>' for subsequent requests"
+    - "Set Authorization header as 'Bearer auth_token' for subsequent requests, where auth_token is the token extracted from the response JSON"
   success_condition:
     type: url_contains
     value: "/users/v1/login"
