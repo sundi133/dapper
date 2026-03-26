@@ -25,6 +25,15 @@
       "transformer": {
         "use": ["openrouter"]
       }
+    },
+    {
+      "name": "ollama",
+      "api_base_url": "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}/v1/chat/completions",
+      "api_key": "ollama",
+      "models": ["*"],
+      "transformer": {
+        "use": [["maxcompletiontokens", { "max_completion_tokens": 16384 }]]
+      }
     }
   ],
   "Router": {
