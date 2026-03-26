@@ -153,7 +153,22 @@ async function interpolateVariables(
     let result = template
       .replace(/{{WEB_URL}}/g, variables.webUrl)
       .replace(/{{REPO_PATH}}/g, variables.repoPath)
+      .replace(/{{GITHUB_URL}}/g, variables.repoPath)
       .replace(/{{MCP_SERVER}}/g, variables.MCP_SERVER || 'playwright-agent1');
+
+    // Build authentication context string for the report agent
+    if (config?.authentication) {
+      const auth = config.authentication;
+      const authParts = [
+        `Login Type: ${auth.login_type}`,
+        `Login URL: ${auth.login_url}`,
+        auth.credentials?.username ? `Username: ${auth.credentials.username}` : null,
+        auth.login_flow?.length ? `Login Flow: ${auth.login_flow.length} steps configured` : null,
+      ].filter(Boolean);
+      result = result.replace(/{{AUTH_CONTEXT}}/g, authParts.join('\n'));
+    } else {
+      result = result.replace(/{{AUTH_CONTEXT}}/g, 'No authentication configured');
+    }
 
     if (config) {
       // Handle rules section - if both are empty, use cleaner messaging
