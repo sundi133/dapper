@@ -8,66 +8,201 @@ import { fs, path } from 'zx';
 import chalk from 'chalk';
 import { PentestError } from '../error-handling.js';
 
+type DeliverableSection = 'context' | 'exploitation' | 'analysis';
+
 interface DeliverableFile {
   name: string;
   path: string;
   required: boolean;
+  section: DeliverableSection;
+}
+
+interface AssemblyStats {
+  totalFiles: number;
+  includedFiles: number;
+  missingFiles: string[];
+  duplicateVulnIds: string[];
+  emptySections: string[];
+}
+
+const CONTEXT_DELIVERABLES: DeliverableFile[] = [
+  { name: 'Threat Model', path: 'threat_model_deliverable.md', required: false, section: 'context' },
+  { name: 'Code Analysis', path: 'code_analysis_deliverable.md', required: false, section: 'context' },
+];
+
+const EXPLOITATION_DELIVERABLES: DeliverableFile[] = [
+  { name: 'Injection', path: 'injection_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'XSS', path: 'xss_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Authentication', path: 'auth_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'SSRF', path: 'ssrf_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Authorization', path: 'authz_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Web Attacks', path: 'web_attacks_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Session & Auth', path: 'session_auth_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Business Logic', path: 'business_logic_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Client-Side', path: 'client_side_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Info Gathering', path: 'info_gathering_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Config & Deploy', path: 'config_deploy_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Session Management', path: 'session_mgmt_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Error Handling', path: 'error_handling_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'Cryptography', path: 'crypto_exploitation_evidence.md', required: false, section: 'exploitation' },
+  { name: 'API Testing', path: 'api_testing_exploitation_evidence.md', required: false, section: 'exploitation' },
+];
+
+const ANALYSIS_DELIVERABLES: DeliverableFile[] = [
+  { name: 'Web Hardening', path: 'web_hardening_analysis_deliverable.md', required: false, section: 'analysis' },
+];
+
+function extractVulnIds(content: string): string[] {
+  const pattern = /###\s+([A-Z]+-VULN-\d+)/g;
+  const ids: string[] = [];
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    ids.push(match[1]!);
+  }
+  return ids;
+}
+
+function findDuplicateVulnIds(allIds: string[]): string[] {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const id of allIds) {
+    if (seen.has(id)) dupes.add(id);
+    seen.add(id);
+  }
+  return Array.from(dupes);
+}
+
+function detectEmptySections(content: string): string[] {
+  const sectionPattern = /^(#{1,3}\s+.+)$/gm;
+  const sections: { heading: string; startIdx: number }[] = [];
+  let match;
+  while ((match = sectionPattern.exec(content)) !== null) {
+    sections.push({ heading: match[1]!, startIdx: match.index + match[0].length });
+  }
+
+  const empty: string[] = [];
+  for (let i = 0; i < sections.length; i++) {
+    const start = sections[i]!.startIdx;
+    const end = i + 1 < sections.length ? sections[i + 1]!.startIdx - sections[i + 1]!.heading.length : content.length;
+    const body = content.slice(start, end).trim();
+    if (body.length === 0 || body === '---') {
+      empty.push(sections[i]!.heading);
+    }
+  }
+  return empty;
+}
+
+function scrubInternalPaths(content: string): string {
+  return content
+    .replace(/\/app\/repos\/[^\s)>]+/g, '[REPO_PATH]')
+    .replace(/\/Users\/[^\s)>]+/g, '[LOCAL_PATH]')
+    .replace(/\/home\/[^\s)>]+/g, '[LOCAL_PATH]')
+    .replace(/\/tmp\/[^\s)>]+/g, '[TMP_PATH]');
 }
 
 // Pure function: Assemble final report from specialist deliverables
 export async function assembleFinalReport(sourceDir: string): Promise<string> {
-  const deliverableFiles: DeliverableFile[] = [
-    { name: 'Threat Model', path: 'threat_model_deliverable.md', required: false },
-    { name: 'Injection', path: 'injection_exploitation_evidence.md', required: false },
-    { name: 'XSS', path: 'xss_exploitation_evidence.md', required: false },
-    { name: 'Authentication', path: 'auth_exploitation_evidence.md', required: false },
-    { name: 'SSRF', path: 'ssrf_exploitation_evidence.md', required: false },
-    { name: 'Authorization', path: 'authz_exploitation_evidence.md', required: false },
-    { name: 'Web Attacks', path: 'web_attacks_exploitation_evidence.md', required: false },
-    { name: 'Session & Auth', path: 'session_auth_exploitation_evidence.md', required: false },
-    { name: 'Business Logic', path: 'business_logic_exploitation_evidence.md', required: false },
-    { name: 'Client-Side', path: 'client_side_exploitation_evidence.md', required: false },
-    { name: 'Web Hardening', path: 'web_hardening_analysis_deliverable.md', required: false },
-    { name: 'Info Gathering', path: 'info_gathering_exploitation_evidence.md', required: false },
-    { name: 'Config & Deploy', path: 'config_deploy_exploitation_evidence.md', required: false },
-    { name: 'Session Management', path: 'session_mgmt_exploitation_evidence.md', required: false },
-    { name: 'Error Handling', path: 'error_handling_exploitation_evidence.md', required: false },
-    { name: 'Cryptography', path: 'crypto_exploitation_evidence.md', required: false },
-    { name: 'API Testing', path: 'api_testing_exploitation_evidence.md', required: false }
+  const allDeliverables = [
+    ...CONTEXT_DELIVERABLES,
+    ...EXPLOITATION_DELIVERABLES,
+    ...ANALYSIS_DELIVERABLES,
   ];
 
-  const sections: string[] = [];
+  const stats: AssemblyStats = {
+    totalFiles: allDeliverables.length,
+    includedFiles: 0,
+    missingFiles: [],
+    duplicateVulnIds: [],
+    emptySections: [],
+  };
 
-  for (const file of deliverableFiles) {
+  const contextSections: string[] = [];
+  const exploitationSections: string[] = [];
+  const analysisSections: string[] = [];
+  const allVulnIds: string[] = [];
+
+  for (const file of allDeliverables) {
     const filePath = path.join(sourceDir, 'deliverables', file.path);
     try {
       if (await fs.pathExists(filePath)) {
-        const content = await fs.readFile(filePath, 'utf8');
-        sections.push(content);
-        console.log(chalk.green(`✅ Added ${file.name} findings`));
+        let content = await fs.readFile(filePath, 'utf8');
+        if (content.trim().length === 0) {
+          console.log(chalk.yellow(`⚠️ Empty file: ${file.path}`));
+          stats.missingFiles.push(file.path);
+          continue;
+        }
+
+        content = scrubInternalPaths(content);
+        const vulnIds = extractVulnIds(content);
+        allVulnIds.push(...vulnIds);
+
+        const markedContent = `<!-- BEGIN:${file.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')} -->\n${content}\n<!-- END:${file.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')} -->`;
+
+        if (file.section === 'context') contextSections.push(markedContent);
+        else if (file.section === 'exploitation') exploitationSections.push(markedContent);
+        else analysisSections.push(markedContent);
+
+        stats.includedFiles++;
+        console.log(chalk.green(`✅ Added ${file.name} (${vulnIds.length} vuln IDs)`));
       } else if (file.required) {
         throw new Error(`Required file ${file.path} not found`);
       } else {
+        stats.missingFiles.push(file.path);
         console.log(chalk.gray(`⏭️  No ${file.name} deliverable found`));
       }
     } catch (error) {
-      if (file.required) {
-        throw error;
-      }
+      if (file.required) throw error;
       const err = error as Error;
       console.log(chalk.yellow(`⚠️ Could not read ${file.path}: ${err.message}`));
     }
   }
 
-  const finalContent = sections.join('\n\n');
+  stats.duplicateVulnIds = findDuplicateVulnIds(allVulnIds);
+  if (stats.duplicateVulnIds.length > 0) {
+    console.log(chalk.yellow(`⚠️ Duplicate vulnerability IDs found: ${stats.duplicateVulnIds.join(', ')}`));
+  }
+
+  const assemblyMeta = [
+    `<!-- ASSEMBLY_METADATA`,
+    `  files_included: ${stats.includedFiles}/${stats.totalFiles}`,
+    `  vuln_ids_total: ${allVulnIds.length}`,
+    `  duplicate_ids: ${stats.duplicateVulnIds.length > 0 ? stats.duplicateVulnIds.join(', ') : 'none'}`,
+    `  missing_files: ${stats.missingFiles.length > 0 ? stats.missingFiles.join(', ') : 'none'}`,
+    `  assembled_at: ${new Date().toISOString()}`,
+    `-->`,
+  ].join('\n');
+
+  const parts: string[] = [assemblyMeta];
+
+  if (contextSections.length > 0) {
+    parts.push('<!-- SECTION:CONTEXT -->', ...contextSections);
+  }
+  if (exploitationSections.length > 0) {
+    parts.push('<!-- SECTION:EXPLOITATION_EVIDENCE -->', ...exploitationSections);
+  }
+  if (analysisSections.length > 0) {
+    parts.push('<!-- SECTION:ANALYSIS -->', ...analysisSections);
+  }
+
+  let finalContent = parts.join('\n\n');
+
+  const emptySections = detectEmptySections(finalContent);
+  if (emptySections.length > 0) {
+    stats.emptySections = emptySections;
+    console.log(chalk.yellow(`⚠️ Empty sections detected: ${emptySections.length}`));
+    for (const heading of emptySections) {
+      console.log(chalk.yellow(`   - ${heading}`));
+    }
+  }
+
   const deliverablesDir = path.join(sourceDir, 'deliverables');
   const finalReportPath = path.join(deliverablesDir, 'comprehensive_security_assessment_report.md');
 
   try {
-    // Ensure deliverables directory exists
     await fs.ensureDir(deliverablesDir);
     await fs.writeFile(finalReportPath, finalContent);
     console.log(chalk.green(`✅ Final report assembled at ${finalReportPath}`));
+    console.log(chalk.blue(`📊 Assembly stats: ${stats.includedFiles} files, ${allVulnIds.length} vuln IDs, ${stats.duplicateVulnIds.length} duplicates, ${stats.emptySections.length} empty sections`));
   } catch (error) {
     const err = error as Error;
     throw new PentestError(
@@ -132,31 +267,29 @@ export async function injectModelIntoReport(
 
   let reportContent = await fs.readFile(reportPath, 'utf8');
 
-  // 4. Find and inject model line after "Assessment Date" in Executive Summary
-  // Pattern: "- Assessment Date: <date>" followed by a newline
-  const assessmentDatePattern = /^(- Assessment Date: .+)$/m;
-  const match = reportContent.match(assessmentDatePattern);
+  // 4. Find and inject model line after "Assessment Date" or "Assessment Type" in Document Control
+  const assessmentDatePattern = /^(\*?\*?Assessment Date\*?\*?:?\s*.+)$/m;
+  const assessmentTypePattern = /^(\*?\*?Assessment Type\*?\*?:?\s*.+)$/m;
+  const modelLine = `- **Model:** ${modelStr}`;
 
-  if (match) {
-    // Inject model line after Assessment Date
-    const modelLine = `- Model: ${modelStr}`;
-    reportContent = reportContent.replace(
-      assessmentDatePattern,
-      `$1\n${modelLine}`
-    );
-    console.log(chalk.green('✅ Model info injected into Executive Summary'));
+  const dateMatch = reportContent.match(assessmentDatePattern);
+  const typeMatch = reportContent.match(assessmentTypePattern);
+
+  if (dateMatch) {
+    reportContent = reportContent.replace(assessmentDatePattern, `$1\n${modelLine}`);
+    console.log(chalk.green('✅ Model info injected after Assessment Date'));
+  } else if (typeMatch) {
+    reportContent = reportContent.replace(assessmentTypePattern, `$1\n${modelLine}`);
+    console.log(chalk.green('✅ Model info injected after Assessment Type'));
   } else {
-    // If no Assessment Date line found, try to add after Executive Summary header
-    const execSummaryPattern = /^## Executive Summary$/m;
-    if (reportContent.match(execSummaryPattern)) {
-      // Add model as first item in Executive Summary
-      reportContent = reportContent.replace(
-        execSummaryPattern,
-        `## Executive Summary\n- Model: ${modelStr}`
-      );
-      console.log(chalk.green('✅ Model info added to Executive Summary header'));
+    const docControlPattern = /^##\s+\d*\.?\s*Document Control$/m;
+    const execSummaryPattern = /^##\s+\d*\.?\s*Executive Summary$/m;
+    const target = reportContent.match(docControlPattern) || reportContent.match(execSummaryPattern);
+    if (target) {
+      reportContent = reportContent.replace(target[0], `${target[0]}\n${modelLine}`);
+      console.log(chalk.green('✅ Model info added to report header section'));
     } else {
-      console.log(chalk.yellow('⚠️ Could not find Executive Summary section'));
+      console.log(chalk.yellow('⚠️ Could not find Document Control or Executive Summary section'));
       return;
     }
   }
