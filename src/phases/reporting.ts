@@ -7,6 +7,7 @@
 import { fs, path } from 'zx';
 import chalk from 'chalk';
 import { PentestError } from '../error-handling.js';
+import { generateComplianceMetadata, type ComplianceFinding } from '../compliance/index.js';
 
 type DeliverableSection = 'context' | 'exploitation' | 'analysis';
 
@@ -60,6 +61,41 @@ function extractVulnIds(content: string): string[] {
     ids.push(match[1]!);
   }
   return ids;
+}
+
+function extractCweIds(content: string): string[] {
+  const pattern = /CWE-(\d+)/gi;
+  const ids = new Set<string>();
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    ids.add(`CWE-${match[1]}`);
+  }
+  return Array.from(ids);
+}
+
+/**
+ * Parse per-finding CWE associations by scanning each vulnerability heading section
+ * for CWE references. Returns ComplianceFinding[] for the compliance module.
+ */
+function buildFindingsWithCwes(content: string): ComplianceFinding[] {
+  const findingPattern = /###\s+([A-Z]+-VULN-\d+)[^\n]*/g;
+  const findings: ComplianceFinding[] = [];
+  const matches: Array<{ id: string; startIdx: number }> = [];
+
+  let match;
+  while ((match = findingPattern.exec(content)) !== null) {
+    matches.push({ id: match[1]!, startIdx: match.index });
+  }
+
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i]!.startIdx;
+    const end = i + 1 < matches.length ? matches[i + 1]!.startIdx : content.length;
+    const section = content.slice(start, end);
+    const cweIds = extractCweIds(section);
+    findings.push({ id: matches[i]!.id, cweIds });
+  }
+
+  return findings;
 }
 
 function findDuplicateVulnIds(allIds: string[]): string[] {
@@ -185,6 +221,17 @@ export async function assembleFinalReport(sourceDir: string): Promise<string> {
   }
 
   let finalContent = parts.join('\n\n');
+
+  // Build compliance mapping from CWE references found in deliverables
+  const complianceFindings = buildFindingsWithCwes(finalContent);
+  const globalCweIds = extractCweIds(finalContent);
+  if (globalCweIds.length > 0) {
+    const complianceMeta = generateComplianceMetadata(complianceFindings);
+    if (complianceMeta) {
+      finalContent = assemblyMeta + '\n\n' + complianceMeta + '\n\n' + finalContent.slice(assemblyMeta.length);
+      console.log(chalk.blue(`📋 Compliance mapping: ${globalCweIds.length} CWEs mapped across ${complianceFindings.length} findings`));
+    }
+  }
 
   const emptySections = detectEmptySections(finalContent);
   if (emptySections.length > 0) {
