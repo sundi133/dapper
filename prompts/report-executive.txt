@@ -167,6 +167,19 @@ PRESERVE:
   * All code blocks, HTTP requests/responses, and proof artifacts
   * CVSS scores where present
   * Exploitation steps in their original detail
+  * Response Comparison tables showing actual vs ideal responses (Actual (Vulnerable) vs Ideal (Secure))
+  * Security Rationale paragraphs that explain why the ideal response is correct
+}
+
+## 5.X Ideal Response Summary
+
+{After all exploitation evidence sections, add a consolidated table summarizing ideal responses for all exploited vulnerabilities. This section helps developers quickly see what every affected endpoint should return when properly secured.
+
+| # | Vuln ID | Endpoint | Actual Status | Ideal Status | Key Fix |
+|---|---------|----------|--------------|-------------|---------|
+{For each EXPLOITED vulnerability that includes a Response Comparison table, extract one summary row. "Key Fix" is a one-line description of the primary remediation from the Security Rationale.}
+
+This table provides a quick reference for development teams to validate their fixes — after remediation, each endpoint's response should match the "Ideal" column.
 }
 
 ## 6. Impact Analysis
@@ -179,11 +192,13 @@ Focus only on findings that were actually exploited or have high-confidence pote
 
 ## 7. Remediation Roadmap
 
+For each remediation item, reference the corresponding Ideal Response from the exploitation evidence (Section 5) to show exactly what the fixed endpoint should return. This gives developers a concrete "definition of done" for each fix.
+
 ### 7.1 Immediate Actions (0-30 days)
-{Critical and high severity findings that need urgent remediation}
+{Critical and high severity findings that need urgent remediation. For each item, include the vulnerability ID and reference its Ideal Response — e.g., "After fix, GET /api/users/[id] should return 403 Forbidden instead of the current 200 with another user's data."}
 
 ### 7.2 Short-term Actions (30-90 days)
-{Medium severity findings and architectural improvements}
+{Medium severity findings and architectural improvements. Reference ideal responses where applicable.}
 
 ### 7.3 Long-term Actions (90+ days)
 {Systemic improvements, security program enhancements}

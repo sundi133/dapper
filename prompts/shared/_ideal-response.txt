@@ -1,0 +1,44 @@
+<ideal_response_generation>
+## Ideal Response Generation (MANDATORY for Exploited Vulnerabilities)
+
+For every vulnerability classified as **EXPLOITED**, you MUST generate an **Ideal Response** section that shows what the endpoint should return instead of the vulnerable response. This comparison helps developers understand exactly what correct behavior looks like.
+
+**When to generate:** Only for EXPLOITED vulnerabilities with confirmed impact. Skip for POTENTIAL or FALSE_POSITIVE findings.
+
+**What to capture:**
+
+1. **Actual Response (Vulnerable):** The real HTTP response you observed during exploitation -- status code, relevant headers, and a body excerpt showing the vulnerability (e.g., leaked data, error details, reflected input).
+
+2. **Ideal Response (Secure):** The response the endpoint should return if properly secured -- the correct status code, security headers, and a safe response body.
+
+3. **Security Rationale:** A brief explanation (2-3 sentences) of why the ideal response is correct and what defensive mechanism produces it.
+
+**Per-Vulnerability-Type Guidance:**
+
+- **SQL Injection / Command Injection:** Ideal response rejects malformed input with a generic 400 validation error. No database error messages, stack traces, or query details leaked. Body: `{"error": "Invalid input"}` or similar generic message.
+- **XSS (Reflected/Stored):** Ideal response properly encodes/escapes user input before rendering. Output contains HTML-entity-encoded or sanitized content. Include `Content-Security-Policy` header and `X-Content-Type-Options: nosniff`.
+- **Authentication Bypass:** Ideal response returns `401 Unauthorized` with a generic error body. No session token or user data provided without valid credentials.
+- **Authorization / IDOR:** Ideal response returns `403 Forbidden` when accessing another user's resources. No data from the unauthorized resource is included in the response body.
+- **SSRF:** Ideal response returns `400 Bad Request` rejecting internal/private URLs. The server validates URLs against an allowlist before making any outbound request.
+- **Business Logic:** Ideal response enforces the business rule (e.g., price validation, quantity limits, workflow step ordering) and returns a descriptive 400/422 error without processing the invalid transaction.
+- **Session Management:** Ideal response sets secure cookie attributes: `HttpOnly`, `Secure`, `SameSite=Strict` (or `Lax`). Session tokens are regenerated on authentication state changes.
+- **Error Handling / Information Disclosure:** Ideal response returns a generic error page or JSON error without stack traces, internal paths, framework versions, or debug information. Status code matches the error class (400 for client errors, 500 for server errors).
+- **Cryptography:** Ideal response uses strong algorithms and proper key management. Sensitive data is encrypted in transit and at rest. No weak ciphers or deprecated protocols in the TLS handshake.
+- **Configuration / Deployment:** Ideal response has security headers present (`Strict-Transport-Security`, `X-Frame-Options`, `Content-Security-Policy`), debug mode disabled, and default credentials changed.
+- **Client-Side:** Ideal response includes proper CSP headers, does not expose sensitive data in client-side storage or JavaScript variables, and validates input server-side regardless of client-side checks.
+- **API Testing:** Ideal response enforces rate limiting, proper authentication, input validation, and returns appropriate HTTP status codes with generic error messages for invalid requests.
+
+**Markdown format to use in evidence deliverable (place after "Proof of Impact" for each exploited vulnerability):**
+
+```
+**Response Comparison:**
+
+| | Actual (Vulnerable) | Ideal (Secure) |
+|---|---|---|
+| **Status Code** | [observed status] | [correct status] |
+| **Key Headers** | [relevant headers or "none"] | [security headers that should be present] |
+| **Body (excerpt)** | [truncated response showing the vulnerability] | [what the response body should contain] |
+
+**Security Rationale:** [2-3 sentence explanation of why the ideal response is correct and what fix produces it]
+```
+</ideal_response_generation>
