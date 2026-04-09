@@ -39,6 +39,7 @@ Read these files to gather complete context:
 
 The concatenated report contains HTML comment markers:
 - `<!-- ASSEMBLY_METADATA ... -->` - Stats about the assembly (remove from output)
+- `<!-- COMPLIANCE_MAPPING ... -->` - Pre-computed mapping of vulnerability findings to compliance framework controls (OWASP, PCI-DSS, SOC 2, NIST 800-53). Use this data to populate the Compliance Controls column in the findings table and to build section 8. Remove the marker from output.
 - `<!-- SECTION:CONTEXT -->` - Threat model and code analysis (remove markers from output)
 - `<!-- SECTION:EXPLOITATION_EVIDENCE -->` - All exploitation evidence (remove markers from output)
 - `<!-- SECTION:ANALYSIS -->` - Hardening analysis (remove markers from output)
@@ -68,9 +69,9 @@ Transform the concatenated content into this exact structure. Use numbered secti
 
 ### 2.2 Consolidated Findings Table
 
-| # | ID | Title | Category | Severity | CVSS | Status |
-|---|-----|-------|----------|----------|------|--------|
-{For each unique vulnerability found across ALL exploitation evidence sections, add one row. Deduplicate: if the same vulnerability ID appears in multiple sections, include it only once. Status is either "Exploited" or "Potential (Blocked)".}
+| # | ID | Title | Category | Severity | CVSS | Status | Compliance Controls |
+|---|-----|-------|----------|----------|------|--------|---------------------|
+{For each unique vulnerability found across ALL exploitation evidence sections, add one row. Deduplicate: if the same vulnerability ID appears in multiple sections, include it only once. Status is either "Exploited" or "Potential (Blocked)". For the Compliance Controls column, use the `<!-- COMPLIANCE_MAPPING -->` data injected into the report to list the impacted control IDs (e.g., "OWASP A03:2021, PCI-DSS 6.2.4"). If a finding has CWE references, map them to the compliance controls listed in the COMPLIANCE_MAPPING comment block. If no mapping is available, leave the cell empty.}
 
 ### 2.3 Risk Distribution
 [Summarize the distribution: X Critical, Y High, Z Medium findings. Call out any patterns — e.g., "Authorization controls are consistently weak" or "Cryptographic implementations contain fundamental design flaws".]
@@ -204,7 +205,43 @@ For each remediation item, reference the corresponding Ideal Response from the e
 {Systemic improvements, security program enhancements}
 
 ## 8. Compliance Impact
-{If applicable, note which findings affect compliance with common frameworks: PCI-DSS, SOC 2, GDPR, etc. Only include if the application context suggests compliance relevance.}
+
+{Use the `<!-- COMPLIANCE_MAPPING -->` data from the assembled report to build this section. The mapping provides pre-computed associations between vulnerability findings and compliance framework controls. Organize the section as follows:}
+
+### 8.1 OWASP Top 10 (2021)
+{For each OWASP Top 10 category that has impacted findings, list the category ID, name, and the vulnerability IDs that map to it. Present as a table:}
+
+| OWASP Category | Control Name | Impacted Findings |
+|----------------|-------------|-------------------|
+{e.g., A01:2021 | Broken Access Control | AUTHZ-VULN-01, AUTHZ-VULN-03}
+{e.g., A03:2021 | Injection | INJ-VULN-01, INJ-VULN-02}
+{Only include categories that have at least one finding mapped to them.}
+
+### 8.2 PCI-DSS 4.0
+{For each PCI-DSS requirement impacted by the findings:}
+
+| Requirement | Description | Impacted Findings |
+|-------------|-----------|-------------------|
+{e.g., 6.2.4 | Software Engineering Techniques to Prevent Injection Attacks | INJ-VULN-01, XSS-VULN-01}
+{Only include requirements that have at least one finding mapped to them. If no findings map to PCI-DSS, state "No PCI-DSS requirements were directly impacted by the identified findings."}
+
+### 8.3 SOC 2 Trust Service Criteria
+{For each SOC 2 trust service criterion impacted:}
+
+| Criterion | Description | Impacted Findings |
+|-----------|-----------|-------------------|
+{e.g., CC6.1 | Logical and Physical Access Controls | AUTHZ-VULN-01, AUTH-VULN-01}
+{Only include criteria that have at least one finding mapped to them. If no findings map to SOC 2, state "No SOC 2 trust service criteria were directly impacted by the identified findings."}
+
+### 8.4 NIST SP 800-53 Rev. 5
+{For each NIST 800-53 control impacted:}
+
+| Control | Control Name | Impacted Findings |
+|---------|-------------|-------------------|
+{e.g., AC-3 | Access Enforcement | AUTHZ-VULN-01, AUTHZ-VULN-03}
+{Only include controls that have at least one finding mapped to them. If no findings map to NIST 800-53, state "No NIST 800-53 controls were directly impacted by the identified findings."}
+
+{If no COMPLIANCE_MAPPING data is present in the assembled report, generate compliance mappings based on the CWE references found in the vulnerability findings using standard CWE-to-framework mapping knowledge.}
 
 ## 9. Lessons Learned
 {3-5 concise, actionable lessons from this engagement. Focus on systemic issues, not individual bugs.}
@@ -216,7 +253,7 @@ MANDATORY quality standards for the final report:
 
 1. NO INTERNAL PATHS: Remove all file system paths like `/app/repos/...`, `/Users/...`, `/home/...`, `/tmp/...`. Replace with generic references like "the application source code" or "the configuration file".
 
-2. NO ASSEMBLY ARTIFACTS: Remove all HTML comment markers (`<!-- BEGIN:... -->`, `<!-- END:... -->`, `<!-- SECTION:... -->`, `<!-- ASSEMBLY_METADATA ... -->`).
+2. NO ASSEMBLY ARTIFACTS: Remove all HTML comment markers (`<!-- BEGIN:... -->`, `<!-- END:... -->`, `<!-- SECTION:... -->`, `<!-- ASSEMBLY_METADATA ... -->`, `<!-- COMPLIANCE_MAPPING ... -->`).
 
 3. CODE BLOCK LANGUAGE TAGS: Every code block must have a language identifier. Use `http` for HTTP requests/responses, `python` for Python, `javascript` for JS, `json` for JSON, `bash` for shell commands, `xml` for XML/HTML. If uncertain, use `text`.
 

@@ -1,0 +1,22 @@
+// Copyright (C) 2025 Keygraph, Inc.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License version 3
+// as published by the Free Software Foundation.
+
+export {
+  type ComplianceFramework,
+  type ComplianceControl,
+  type CweComplianceEntry,
+  getComplianceControlsForCwe,
+  getComplianceControlsForCwes,
+  groupControlsByFramework,
+  getCweComplianceEntry,
+  getAllMappedCweIds,
+} from './mappings.js';
+
+export {
+  generateComplianceReport,
+  generateComplianceMetadata,
+  type ComplianceFinding,
+} from './report-generator.js';

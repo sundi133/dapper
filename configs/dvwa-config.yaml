@@ -1,34 +1,28 @@
-# Example configuration file for pentest-agent
-# Copy this file and modify it for your specific testing needs
+# DVWA configuration for local testing
+# DVWA runs on host port 4280, accessible from Docker as host.docker.internal
 
 authentication:
-  login_type: form  # Options: 'form' or 'sso'
-  login_url: "https://doing-realm-blank-calvin.trycloudflare.com/DVWA/login.php"
+  login_type: form
+  login_url: "http://host.docker.internal:4280/login.php"
   credentials:
     username: "admin"
     password: "password"
-  
-  # Natural language instructions for login flow
+
   login_flow:
-    - "Type $username into the email field"
-    - "Type $password into the password field"
-    - "Click the 'Sign In' button"
-  
+    - "Type $username into the Username field"
+    - "Type $password into the Password field"
+    - "Click the 'Login' button"
+
   success_condition:
-    type: url_contains  # Options: 'url_contains' or 'element_present'
-    value: "/dashboard"
+    type: url_contains
+    value: "index.php"
 
 rules:
   avoid:
-    - description: "Do not test the marketing site subdomain"
-      type: subdomain
-      url_path: "www"
-    
     - description: "Skip logout functionality"
       type: path
-      url_path: "/logout"
-    
-    - description: "No DELETE operations on user API"
-      type: path
-      url_path: "/api/v1/users/*"
+      url_path: "/logout.php"
 
+    - description: "Skip setup page to avoid resetting the database"
+      type: path
+      url_path: "/setup.php"

@@ -615,6 +615,64 @@ const CWE_RULES = [
   },
 ];
 
+// CWE-to-compliance-framework control mapping.
+// Maps CWE IDs to OWASP Top 10, PCI-DSS 4.0, SOC 2, and NIST 800-53 control IDs.
+const CWE_COMPLIANCE_MAP = {
+  'CWE-89':  { owasp: 'A03:2021', pci_dss: '6.2.4', soc2: 'CC6.1', nist: 'SI-10' },
+  'CWE-79':  { owasp: 'A03:2021', pci_dss: '6.2.4', soc2: 'CC6.1', nist: 'SI-10' },
+  'CWE-918': { owasp: 'A10:2021', pci_dss: '6.2.4', soc2: 'CC6.6', nist: 'SC-7' },
+  'CWE-639': { owasp: 'A01:2021', pci_dss: '7.2.2', soc2: 'CC6.1', nist: 'AC-3' },
+  'CWE-862': { owasp: 'A01:2021', pci_dss: '7.2.1', soc2: 'CC6.1', nist: 'AC-3' },
+  'CWE-287': { owasp: 'A07:2021', pci_dss: '8.3.1', soc2: 'CC6.1', nist: 'IA-2' },
+  'CWE-321': { owasp: 'A02:2021', pci_dss: '3.6.1', soc2: 'CC6.1', nist: 'SC-12' },
+  'CWE-798': { owasp: 'A07:2021', pci_dss: '8.6.2', soc2: 'CC6.1', nist: 'IA-5' },
+  'CWE-256': { owasp: 'A02:2021', pci_dss: '8.3.2', soc2: 'CC6.1', nist: 'IA-5' },
+  'CWE-306': { owasp: 'A07:2021', pci_dss: '8.3.1', soc2: 'CC6.1', nist: 'IA-2' },
+  'CWE-915': { owasp: 'A01:2021', pci_dss: '6.2.4', soc2: 'CC6.1', nist: 'SI-10' },
+  'CWE-489': { owasp: 'A05:2021', pci_dss: '6.3.1', soc2: 'CC8.1', nist: 'CM-7' },
+  'CWE-209': { owasp: 'A05:2021', pci_dss: '6.2.4', soc2: 'CC7.2', nist: 'SI-11' },
+  'CWE-703': { owasp: 'A05:2021', pci_dss: '6.2.4', soc2: 'CC7.2', nist: 'SI-11' },
+  'CWE-307': { owasp: 'A07:2021', pci_dss: '8.3.4', soc2: 'CC6.1', nist: 'AC-7' },
+  'CWE-799': { owasp: 'A07:2021', pci_dss: '8.3.4', soc2: 'CC6.1', nist: 'SC-5' },
+  'CWE-613': { owasp: 'A07:2021', pci_dss: '8.2.8', soc2: 'CC6.1', nist: 'AC-12' },
+  'CWE-294': { owasp: 'A07:2021', pci_dss: '8.3.1', soc2: 'CC6.1', nist: 'IA-2' },
+  'CWE-525': { owasp: 'A04:2021', pci_dss: '6.2.4', soc2: 'CC6.7', nist: 'SC-28' },
+  'CWE-208': { owasp: 'A02:2021', pci_dss: '6.2.4', soc2: 'CC6.1', nist: 'SC-13' },
+  'CWE-367': { owasp: 'A04:2021', pci_dss: '6.2.4', soc2: 'CC8.1', nist: 'SI-7' },
+  'CWE-1021': { owasp: 'A05:2021', pci_dss: '6.2.4', soc2: 'CC6.1', nist: 'SI-10' },
+  'CWE-319': { owasp: 'A02:2021', pci_dss: '4.2.1', soc2: 'CC6.7', nist: 'SC-8' },
+  'CWE-312': { owasp: 'A02:2021', pci_dss: '3.5.1', soc2: 'CC6.1', nist: 'SC-28' },
+  'CWE-200': { owasp: 'A01:2021', pci_dss: '6.2.4', soc2: 'CC6.1', nist: 'AC-4' },
+  'CWE-204': { owasp: 'A07:2021', pci_dss: '6.2.4', soc2: 'CC6.1', nist: 'SI-11' },
+  'CWE-650': { owasp: 'A05:2021', pci_dss: '6.2.4', soc2: 'CC6.1', nist: 'AC-3' },
+};
+
+const resolveComplianceControls = (cweIds) => {
+  const owasp = new Set();
+  const pci_dss = new Set();
+  const soc2 = new Set();
+  const nist = new Set();
+
+  for (const rawId of cweIds) {
+    const id = rawId.trim().toUpperCase();
+    const normalized = id.startsWith('CWE-') ? id : `CWE-${id}`;
+    const mapping = CWE_COMPLIANCE_MAP[normalized];
+    if (mapping) {
+      owasp.add(mapping.owasp);
+      pci_dss.add(mapping.pci_dss);
+      soc2.add(mapping.soc2);
+      nist.add(mapping.nist);
+    }
+  }
+
+  return {
+    owasp_controls: [...owasp].join('; '),
+    pci_dss_controls: [...pci_dss].join('; '),
+    soc2_controls: [...soc2].join('; '),
+    nist_controls: [...nist].join('; '),
+  };
+};
+
 const collapseText = (...parts) =>
   parts
     .flat()
@@ -691,6 +749,8 @@ const enrichFindings = (findings) => findings.map((finding) => {
     })
   )].join('; ');
 
+  const complianceControls = resolveComplianceControls(cweIds);
+
   return {
     ...rest,
     source_file: normalizeMultiValueField(finding.source_file),
@@ -700,6 +760,10 @@ const enrichFindings = (findings) => findings.map((finding) => {
     remediation_suggestions: hasValue(finding.remediation_suggestions)
       ? String(finding.remediation_suggestions).trim()
       : remediation,
+    owasp_controls: complianceControls.owasp_controls,
+    pci_dss_controls: complianceControls.pci_dss_controls,
+    soc2_controls: complianceControls.soc2_controls,
+    nist_controls: complianceControls.nist_controls,
   };
 });
 
@@ -716,6 +780,7 @@ const findingsToCSV = (findings) => {
     'source_endpoint', 'parameter', 'code_location',
     'missing_defense', 'attack_path', 'exploitation_hypothesis',
     'confidence', 'externally_exploitable', 'cwe', 'cwe_names', 'remediation_suggestions',
+    'owasp_controls', 'pci_dss_controls', 'soc2_controls', 'nist_controls',
     'developer_verification_steps',
     'evidence_snippet', 'exploit_result', 'affected_endpoint',
     'attack_steps_summary', 'report_section', 'source_file', 'notes',
