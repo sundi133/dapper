@@ -193,28 +193,114 @@ def _build_subagents(classes: list[str], skip_exploit: bool, vars_: dict[str, st
 
 
 def _stream_turn(session: Session, agent, messages: list[dict[str, Any]]) -> list[Any]:
-    """Run one agent turn, emit step events, return the updated message list."""
+    """Run one agent turn, emit fine-grained chat events, return final messages.
+
+    Uses LangGraph multi-mode streaming:
+      - "messages" -> token-by-token AI message chunks
+      - "updates"  -> per-node updates (so we see tool calls/results)
+      - "values"   -> full state snapshots (to capture the final message list)
+
+    Emits to the SSE feed:
+      token        {message_id, role, delta}      streaming text
+      message_end  {message_id}                   message complete
+      tool_call    {call_id, name, args}          model invoked a tool
+      tool_result  {call_id, name, content}       tool returned
+      subagent     {name, action}                 subagent dispatched/finished
+    """
     final_messages: list[Any] = []
+    seen_msg_ids: set[str] = set()
+    seen_tool_call_ids: set[str] = set()
+
     try:
+        stream = agent.stream(
+            {"messages": messages},
+            stream_mode=["messages", "updates", "values"],
+        )
+        for mode, data in stream:
+            if mode == "messages":
+                # data is (AIMessageChunk, metadata)
+                chunk, _meta = data
+                mid = getattr(chunk, "id", "") or ""
+                content = getattr(chunk, "content", "")
+                if isinstance(content, list):
+                    # Tool-call-only chunks; skip.
+                    content = ""
+                if content:
+                    session.emit("token", message_id=mid, role="ai", delta=str(content))
+                    seen_msg_ids.add(mid)
+                # Tool calls arrive on the chunk too.
+                tcs = getattr(chunk, "tool_calls", None) or []
+                for tc in tcs:
+                    tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                    if not tc_id or tc_id in seen_tool_call_ids:
+                        continue
+                    seen_tool_call_ids.add(tc_id)
+                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "")
+                    args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+                    session.emit("tool_call", call_id=tc_id, name=name, args=_safe_json(args))
+            elif mode == "updates":
+                # data is {node_name: {messages: [...]}}
+                if not isinstance(data, dict):
+                    continue
+                for node_name, node_update in data.items():
+                    if not isinstance(node_update, dict):
+                        continue
+                    for m in node_update.get("messages", []) or []:
+                        mtype = getattr(m, "type", "")
+                        # Tool results
+                        if mtype == "tool":
+                            session.emit(
+                                "tool_result",
+                                call_id=getattr(m, "tool_call_id", "") or "",
+                                name=getattr(m, "name", "") or "",
+                                content=_truncate(getattr(m, "content", "")),
+                            )
+                        # Subagent dispatch hints
+                        if "subagent" in (node_name or "").lower() or "task" in (node_name or "").lower():
+                            session.emit("subagent", name=node_name, action="active")
+            elif mode == "values":
+                if isinstance(data, dict):
+                    msgs = data.get("messages", [])
+                    if msgs:
+                        final_messages = msgs
+
+        for mid in seen_msg_ids:
+            session.emit("message_end", message_id=mid)
+
+    except (TypeError, ValueError):
+        # Older deepagents/langgraph: fall back to single-mode values stream.
         for chunk in agent.stream({"messages": messages}, stream_mode="values"):
             msgs = chunk.get("messages", []) if isinstance(chunk, dict) else []
-            if not msgs:
-                continue
-            final_messages = msgs
-            last = msgs[-1]
-            content = getattr(last, "content", "")
-            role = getattr(last, "type", "msg")
-            if isinstance(content, list):
-                content = json.dumps(content)[:4000]
-            if content:
-                session.emit("step", role=role, content=str(content)[:4000])
+            if msgs:
+                final_messages = msgs
+                last = msgs[-1]
+                content = getattr(last, "content", "")
+                if isinstance(content, list):
+                    content = json.dumps(content)[:4000]
+                if content:
+                    session.emit("token", message_id="legacy", role="ai", delta=str(content)[:4000])
+                    session.emit("message_end", message_id="legacy")
     except AttributeError:
         result = agent.invoke({"messages": messages})
         final_messages = result.get("messages", [])
         if final_messages:
             last = final_messages[-1]
-            session.emit("step", role="final", content=str(getattr(last, "content", last))[:4000])
+            session.emit("token", message_id="legacy", role="ai", delta=str(getattr(last, "content", last))[:4000])
+            session.emit("message_end", message_id="legacy")
     return final_messages
+
+
+def _safe_json(v: Any) -> str:
+    try:
+        s = json.dumps(v, default=str)
+    except Exception:
+        s = str(v)
+    return s[:1500]
+
+
+def _truncate(v: Any, n: int = 2000) -> str:
+    s = v if isinstance(v, str) else (json.dumps(v, default=str) if v is not None else "")
+    return s if len(s) <= n else s[:n] + f"... (truncated, {len(s) - n} more)"
 
 
 def _run_agent(session: Session) -> None:

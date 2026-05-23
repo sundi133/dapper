@@ -274,15 +274,37 @@ INDEX_HTML = r"""<!doctype html>
   .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
   .chip { font-size:11px; background:#1f2937; padding:3px 8px; border-radius:12px; cursor:pointer; }
   .chip.on { background:#2563eb; color:white; }
-  .feed { flex:1; overflow:auto; padding:14px 18px; font-size:12px; }
-  .msg { padding:8px 12px; margin-bottom:8px; border-radius:6px; white-space:pre-wrap; word-break:break-word; }
+  .feed { flex:1; overflow:auto; padding:14px 18px; font-size:13px; }
+  .msg { padding:10px 14px; margin-bottom:10px; border-radius:8px; word-break:break-word; line-height:1.5; }
   .msg.user { background:#0f2742; border:1px solid #1d3a5f; }
   .msg.agent { background:#0f141a; border:1px solid #1f2937; border-left:3px solid #2563eb; }
   .msg.question { background:#1f1809; border-left:3px solid #f59e0b; }
-  .msg.tool { background:#0c1014; border-left:2px solid #374151; color:#9aa5b1; font-size:11px; }
-  .msg.error { background:#1a0d0d; border-left:3px solid #ef4444; color:#fecaca; }
-  .msg.status { color:#6b7280; font-size:11px; padding:2px 12px; background:transparent; }
-  .msg .meta { font-size:10px; color:#6b7280; margin-bottom:3px; }
+  .msg.error { background:#1a0d0d; border-left:3px solid #ef4444; color:#fecaca; white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12px; }
+  .msg.status { color:#6b7280; font-size:11px; padding:2px 12px; background:transparent; text-align:center; }
+  .msg .meta { font-size:10px; color:#6b7280; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.04em; }
+  .msg .body { font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .msg .body p { margin:0 0 8px 0; } .msg .body p:last-child { margin-bottom:0; }
+  .msg .body code { background:#1a2230; padding:1px 5px; border-radius:3px; font-family:ui-monospace,monospace; font-size:0.92em; }
+  .msg .body pre { background:#070a0e; border:1px solid #1f2937; padding:10px 12px; border-radius:5px; overflow:auto; font-family:ui-monospace,monospace; font-size:12px; margin:6px 0; }
+  .msg .body pre code { background:transparent; padding:0; }
+  .msg .body h1,.msg .body h2,.msg .body h3 { margin:10px 0 4px 0; font-size:1em; color:#e5e7eb; }
+  .msg .body ul,.msg .body ol { margin:4px 0; padding-left:20px; }
+  .msg .body a { color:#60a5fa; }
+  .msg .body strong { color:#f3f4f6; }
+  .msg .body em { color:#cbd5e1; }
+  .tool { background:#0c1014; border:1px solid #1f2937; border-left:2px solid #374151; margin-bottom:8px; border-radius:6px; font-size:12px; }
+  .tool summary { cursor:pointer; padding:6px 10px; user-select:none; color:#9aa5b1; display:flex; gap:8px; align-items:center; list-style:none; }
+  .tool summary::-webkit-details-marker { display:none; }
+  .tool summary::before { content:"▸"; transition:transform 0.1s; }
+  .tool[open] summary::before { transform:rotate(90deg); }
+  .tool .name { color:#60a5fa; font-weight:600; }
+  .tool .args { color:#6b7280; font-size:11px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tool .pending { color:#f59e0b; font-size:11px; }
+  .tool .done { color:#10b981; font-size:11px; }
+  .tool pre { margin:0; padding:10px 12px; background:#070a0e; border-top:1px solid #1f2937; overflow:auto; max-height:300px; font-family:ui-monospace,monospace; font-size:11px; color:#cbd5e1; white-space:pre-wrap; word-break:break-all; }
+  .typing { display:inline-block; margin-left:6px; color:#6b7280; }
+  .typing::after { content:"●"; animation:blink 1s infinite; }
+  @keyframes blink { 0%,40%{opacity:0.2} 50%{opacity:1} 100%{opacity:0.2} }
   .composer { border-top:1px solid #1f2937; padding:12px 18px; background:#0f141a; }
   .composer .pending { color:#f59e0b; font-size:11px; margin-bottom:6px; }
   .composer .row { display:flex; gap:8px; }
@@ -417,28 +439,130 @@ $("config").onchange = async (e) => {
   } catch {}
 };
 
-function addMsg(cls, text, meta) {
+// ---- minimal markdown renderer (safe-ish: escapes HTML first) ----
+function escapeHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function renderMd(src) {
+  let s = escapeHtml(src);
+  // fenced code blocks ```lang\n...\n```
+  s = s.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code>${code.replace(/\n$/, "")}</code></pre>`);
+  // inline code `x`
+  s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  // headers
+  s = s.replace(/^### (.+)$/gm, "<h3>$1</h3>")
+       .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+       .replace(/^# (.+)$/gm, "<h1>$1</h1>");
+  // bold/italic
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+       .replace(/(?<![*\w])\*([^*\n]+)\*(?!\w)/g, "<em>$1</em>");
+  // links [text](url)
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // lists: contiguous lines starting with "- " or "* "
+  s = s.replace(/((?:^[-*] .+\n?)+)/gm, m => "<ul>" + m.trim().split(/\n/).map(li => "<li>" + li.replace(/^[-*] /, "") + "</li>").join("") + "</ul>");
+  // numbered lists
+  s = s.replace(/((?:^\d+\. .+\n?)+)/gm, m => "<ol>" + m.trim().split(/\n/).map(li => "<li>" + li.replace(/^\d+\. /, "") + "</li>").join("") + "</ol>");
+  // paragraphs: split on double newline
+  s = s.split(/\n\n+/).map(block => /^\s*<(h\d|ul|ol|pre)/.test(block) ? block : "<p>" + block.replace(/\n/g, "<br>") + "</p>").join("");
+  return s;
+}
+
+// ---- message + tool-call rendering ----
+const liveMessages = new Map(); // message_id -> {bubble, body, raw}
+const liveToolCalls = new Map(); // call_id -> {el, pre}
+
+function feedScroll() {
+  const feed = $("feed");
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function newBubble(cls, metaText) {
   const div = document.createElement("div");
   div.className = "msg " + cls;
-  if (meta) {
+  if (metaText) {
     const m = document.createElement("div");
     m.className = "meta";
-    m.textContent = meta;
+    m.textContent = metaText;
     div.appendChild(m);
   }
   const body = document.createElement("div");
-  body.textContent = text;
+  body.className = "body";
   div.appendChild(body);
-  const feed = $("feed");
-  feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
+  $("feed").appendChild(div);
+  feedScroll();
+  return {bubble: div, body};
+}
+
+function addPlainBubble(cls, text, metaText) {
+  const {body} = newBubble(cls, metaText);
+  if (cls === "agent" || cls === "user" || cls === "question") {
+    body.innerHTML = renderMd(text);
+  } else {
+    body.textContent = text;
+  }
+  feedScroll();
+}
+
+function appendToken(mid, role, delta) {
+  let entry = liveMessages.get(mid);
+  if (!entry) {
+    const {bubble, body} = newBubble("agent", role);
+    const typing = document.createElement("span");
+    typing.className = "typing";
+    bubble.appendChild(typing);
+    entry = {bubble, body, raw: "", typing};
+    liveMessages.set(mid, entry);
+  }
+  entry.raw += delta;
+  entry.body.innerHTML = renderMd(entry.raw);
+  feedScroll();
+}
+
+function finalizeMessage(mid) {
+  const entry = liveMessages.get(mid);
+  if (entry && entry.typing) entry.typing.remove();
+}
+
+function addToolCall(callId, name, argsJson) {
+  const det = document.createElement("details");
+  det.className = "tool";
+  const sum = document.createElement("summary");
+  sum.innerHTML = `<span class="name">${escapeHtml(name)}</span><span class="args">${escapeHtml(argsJson)}</span><span class="pending">running…</span>`;
+  det.appendChild(sum);
+  const pre = document.createElement("pre");
+  pre.textContent = "(awaiting result)";
+  det.appendChild(pre);
+  $("feed").appendChild(det);
+  feedScroll();
+  liveToolCalls.set(callId, {el: det, pre, sum});
+}
+
+function addToolResult(callId, name, content) {
+  const entry = liveToolCalls.get(callId);
+  if (!entry) {
+    // result without matching call — render standalone
+    const det = document.createElement("details");
+    det.className = "tool";
+    const sum = document.createElement("summary");
+    sum.innerHTML = `<span class="name">${escapeHtml(name)}</span><span class="done">done</span>`;
+    det.appendChild(sum);
+    const pre = document.createElement("pre");
+    pre.textContent = content;
+    det.appendChild(pre);
+    $("feed").appendChild(det);
+    feedScroll();
+    return;
+  }
+  entry.pre.textContent = content;
+  const status = entry.sum.querySelector(".pending");
+  if (status) { status.textContent = "done"; status.className = "done"; }
 }
 
 function setPending(question) {
   if (question) {
     pendingQid = true;
     $("pending").classList.remove("hidden");
-    $("pending").textContent = "Agent is asking: " + question;
+    $("pending").textContent = "Agent is asking — your next message will reply.";
     $("composer-input").placeholder = "Reply to the agent's question...";
     $("composer-input").focus();
   } else {
@@ -451,24 +575,30 @@ function setPending(question) {
 function handleEvent(evt) {
   const ts = new Date(evt.ts * 1000).toLocaleTimeString();
   if (evt.kind === "heartbeat") return;
-  if (evt.kind === "step") {
-    const role = evt.role || "agent";
-    const cls = role === "tool" ? "tool" : "agent";
-    addMsg(cls, evt.content, `${ts} · ${role}`);
+  if (evt.kind === "token") {
+    appendToken(evt.message_id, evt.role || "agent", evt.delta);
+  } else if (evt.kind === "message_end") {
+    finalizeMessage(evt.message_id);
+  } else if (evt.kind === "tool_call") {
+    addToolCall(evt.call_id, evt.name || "tool", evt.args || "");
+  } else if (evt.kind === "tool_result") {
+    addToolResult(evt.call_id, evt.name || "tool", evt.content || "");
   } else if (evt.kind === "question") {
-    addMsg("question", evt.question, `${ts} · agent asks`);
+    addPlainBubble("question", evt.question, `${ts} · agent question`);
     setPending(evt.question);
   } else if (evt.kind === "user") {
-    addMsg("user", evt.message, `${ts} · you (${evt.kind === "answer" ? "answered" : evt.kind || "msg"})`);
+    addPlainBubble("user", evt.message, `${ts} · you${evt.kind === "answer" ? " (answer)" : ""}`);
     if (evt.kind === "answer") setPending(null);
+  } else if (evt.kind === "subagent") {
+    addPlainBubble("status", `↳ subagent ${evt.name} ${evt.action || ""}`, "");
   } else if (evt.kind === "log") {
-    addMsg("status", evt.line, ts);
+    addPlainBubble("status", evt.line, "");
   } else if (evt.kind === "status") {
-    addMsg("status", `status: ${evt.status}`, ts);
-    if (evt.status === "running") $("composer-input").placeholder = "Agent is working... your message will queue for the next turn.";
-    if (evt.status === "idle") $("composer-input").placeholder = "Chat with the agent...";
+    addPlainBubble("status", `— ${evt.status} —`, "");
+    if (evt.status === "running") $("composer-input").placeholder = "Agent is working... your message queues for the next turn.";
+    if (evt.status === "idle") { $("composer-input").placeholder = "Chat with the agent..."; setPending(null); }
   } else if (evt.kind === "error") {
-    addMsg("error", evt.message + (evt.traceback ? "\n\n" + evt.traceback : ""), `${ts} · error`);
+    addPlainBubble("error", evt.message + (evt.traceback ? "\n\n" + evt.traceback : ""), `${ts} · error`);
   }
 }
 
@@ -519,7 +649,7 @@ $("start").onclick = async () => {
   const data = await res.json();
   session = data.id;
   $("hdr-status").textContent = `session ${session}`;
-  if (body.initial_message) addMsg("user", body.initial_message, `you · initial`);
+  if (body.initial_message) addPlainBubble("user", body.initial_message, `you · initial`);
   $("composer-input").disabled = false;
   $("send").disabled = false;
 
@@ -545,7 +675,7 @@ async function sendChat() {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({detail: res.statusText}));
-    addMsg("error", "Send failed: " + (err.detail || res.statusText));
+    addPlainBubble("error", "Send failed: " + (err.detail || res.statusText));
   }
 }
 
