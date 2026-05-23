@@ -3,3 +3,4 @@ node_modules/
 audit-logs/
 dist/
 repos/
+scripts/deepagents/__pycache__/

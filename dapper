@@ -25,7 +25,12 @@ show_help() {
            AI Penetration Testing Framework
 
 Usage:
-  ./dapper start URL=<url> REPO=<name>   Start a pentest workflow
+  ./dapper start URL=<url> REPO=<name>   Start a pentest workflow (Temporal)
+  ./dapper deepagent [URL=<url>] [REPO=<name>] [CONFIG=<file>]
+                                         Run via LangChain DeepAgents orchestrator
+                                         (interactive setup if args missing)
+  ./dapper web [HOST=0.0.0.0] [PORT=8000]
+                                         Launch DeepAgents web UI (FastAPI)
   ./dapper logs ID=<workflow-id>         Tail logs for a specific workflow
   ./dapper query ID=<workflow-id>        Query workflow progress
   ./dapper stop                          Stop all containers
@@ -307,6 +312,40 @@ cmd_stop() {
   fi
 }
 
+cmd_web() {
+  parse_args "$@"
+
+  if [ -z "$ANTHROPIC_API_KEY" ] && [ -f .env ]; then
+    set -a; source .env; set +a
+  fi
+
+  PY=${PYTHON:-python3}
+  HOST_=${HOST:-0.0.0.0}
+  PORT_=${PORT:-8000}
+  echo "Dapper DeepAgents web UI -> http://${HOST_}:${PORT_}"
+  exec "$PY" -m uvicorn scripts.deepagents.webapp:app --host "$HOST_" --port "$PORT_"
+}
+
+cmd_deepagent() {
+  parse_args "$@"
+
+  if [ -z "$ANTHROPIC_API_KEY" ] && [ -f .env ]; then
+    set -a; source .env; set +a
+  fi
+
+  PY=${PYTHON:-python3}
+  EXTRA=()
+  [ -n "$URL" ]     && EXTRA+=(--url "$URL")
+  [ -n "$REPO" ]    && EXTRA+=(--repo "$REPO")
+  [ -n "$CONFIG" ]  && EXTRA+=(--config "$CONFIG")
+  [ -n "$OUTPUT" ]  && EXTRA+=(--deliverables "$OUTPUT")
+  [ -n "$CLASSES" ] && EXTRA+=(--classes "$CLASSES")
+  [ "$SKIP_EXPLOIT" = "true" ] && EXTRA+=(--skip-exploit)
+
+  echo "Launching DeepAgents orchestrator (interactive setup if args missing)..."
+  "$PY" -m scripts.deepagents.orchestrator "${EXTRA[@]}"
+}
+
 # Main command dispatch
 case "${1:-help}" in
   start)
@@ -324,6 +363,14 @@ case "${1:-help}" in
   stop)
     shift
     cmd_stop "$@"
+    ;;
+  deepagent)
+    shift
+    cmd_deepagent "$@"
+    ;;
+  web)
+    shift
+    cmd_web "$@"
     ;;
   help|--help|-h|*)
     show_help
