@@ -2,7 +2,7 @@
 # Separate from the main Dockerfile because the web app is Python-only and
 # bundles the DAST tooling the deep agent shells out to.
 
-FROM golang:1.23-bookworm AS gotools
+FROM golang:1.24-bookworm AS gotools
 RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
  && go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest \
  && go install -v github.com/ffuf/ffuf/v2@latest
