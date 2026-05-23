@@ -15,20 +15,29 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# DAST tooling + minimal build deps
+# Layer 1: core utilities (must succeed)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git bash \
-      nmap whatweb sqlmap \
-      libpcap0.8 \
-      tini \
+      ca-certificates curl git bash tini libpcap0.8 \
  && rm -rf /var/lib/apt/lists/*
+
+# Layer 2: nmap (in main, very reliable)
+RUN apt-get update && apt-get install -y --no-install-recommends nmap \
+ && rm -rf /var/lib/apt/lists/*
+
+# Layer 3: whatweb (pulls ruby + many gems; isolate so failures are visible)
+RUN apt-get update && apt-get install -y --no-install-recommends whatweb \
+ && rm -rf /var/lib/apt/lists/* \
+ || echo "WARN: whatweb apt install failed; agent will skip that tool"
+
+# sqlmap via pip — more reliable than apt across slim variants
+RUN pip install --no-cache-dir sqlmap
 
 # Copy Go-built scanners
 COPY --from=gotools /go/bin/subfinder /usr/local/bin/subfinder
 COPY --from=gotools /go/bin/nuclei    /usr/local/bin/nuclei
 COPY --from=gotools /go/bin/ffuf      /usr/local/bin/ffuf
 
-# Warm nuclei templates so first scan isn't slow
+# Warm nuclei templates so first scan isn't slow (non-fatal if offline)
 RUN nuclei -update-templates -silent || true
 
 WORKDIR /app
@@ -36,9 +45,6 @@ WORKDIR /app
 # Install Python deps first for layer caching
 COPY scripts/deepagents/requirements.txt /app/scripts/deepagents/requirements.txt
 RUN pip install -r /app/scripts/deepagents/requirements.txt
-
-# Playwright Chromium (optional — only pulled if you wire Playwright tools in)
-RUN python -m playwright install --with-deps chromium || true
 
 # Now copy the rest of the project
 COPY . /app
@@ -51,12 +57,10 @@ RUN groupadd -g 1001 dapper \
 
 USER dapper
 
-ENV HOST=0.0.0.0 \
-    PORT=8000 \
-    PYTHONPATH=/app
+ENV PYTHONPATH=/app
 
 EXPOSE 8000
 
-# Railway sets $PORT dynamically; default to 8000 locally.
+# Railway injects $PORT at runtime; default to 8000 locally.
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["sh", "-c", "uvicorn scripts.deepagents.webapp:app --host 0.0.0.0 --port ${PORT:-8000}"]
