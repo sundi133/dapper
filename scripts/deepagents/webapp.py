@@ -63,7 +63,8 @@ def list_configs():
 
 class StartRequest(BaseModel):
     url: str
-    repo: str
+    repo: Optional[str] = None
+    repo_git_url: Optional[str] = None
     config: Optional[str] = None
     classes: Optional[list[str]] = None
     skip_exploit: bool = False
@@ -72,13 +73,30 @@ class StartRequest(BaseModel):
 
 @app.post("/api/sessions")
 def create_session(req: StartRequest):
+    import subprocess
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY not set on server")
     if not req.url.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="url must start with http:// or https://")
-    repo_dir = REPOS_DIR / req.repo
-    if not repo_dir.is_dir():
-        raise HTTPException(status_code=400, detail=f"./repos/{req.repo} does not exist")
+
+    repo_name = req.repo or ""
+    if req.repo_git_url:
+        # Clone-on-demand: derive repo name from URL if not provided.
+        if not repo_name:
+            tail = req.repo_git_url.rstrip("/").rsplit("/", 1)[-1]
+            repo_name = tail[:-4] if tail.endswith(".git") else tail
+        REPOS_DIR.mkdir(parents=True, exist_ok=True)
+        target = REPOS_DIR / repo_name
+        if not target.exists():
+            proc = subprocess.run(
+                ["git", "clone", "--depth", "1", req.repo_git_url, str(target)],
+                capture_output=True, text=True, timeout=300,
+            )
+            if proc.returncode != 0:
+                raise HTTPException(status_code=400, detail=f"git clone failed: {proc.stderr[-500:]}")
+    elif repo_name:
+        if not (REPOS_DIR / repo_name).is_dir():
+            raise HTTPException(status_code=400, detail=f"./repos/{repo_name} does not exist")
 
     config_path: Optional[str] = None
     if req.config:
@@ -95,7 +113,7 @@ def create_session(req: StartRequest):
 
     session = start_session(
         url=req.url,
-        repo=req.repo,
+        repo=repo_name,
         config_path=config_path,
         deliverables=deliverables,
         model=req.model,
@@ -252,8 +270,10 @@ INDEX_HTML = r"""<!doctype html>
     <div id="setup">
       <label>Target URL</label>
       <input id="url" placeholder="https://target.example" />
-      <label>Repo (./repos/...)</label>
-      <select id="repo"></select>
+      <label>Repo (./repos/... — optional for pure DAST)</label>
+      <select id="repo"><option value="">(none — pure DAST)</option></select>
+      <label>Or clone a repo by git URL</label>
+      <input id="repo-git" placeholder="https://github.com/owner/repo.git (optional)" />
       <label>Config (./configs/*.yaml)</label>
       <select id="config"><option value="">(none)</option></select>
       <label>Vuln classes</label>
@@ -382,18 +402,19 @@ async function refreshDeliverables() {
 
 $("start").onclick = async () => {
   const url = $("url").value.trim();
-  const repo = $("repo").value;
+  const repo = $("repo").value || null;
+  const repo_git_url = $("repo-git").value.trim() || null;
   const config = $("config").value || null;
   const classes = selectedClasses();
   const skip_exploit = $("skip-exploit").checked;
-  if (!url || !repo) { $("warn").textContent = "URL and repo are required"; return; }
+  if (!url) { $("warn").textContent = "URL is required"; return; }
   $("warn").textContent = "";
   $("start").disabled = true;
   $("events").innerHTML = "";
   const res = await fetch("/api/sessions", {
     method: "POST",
     headers: {"content-type":"application/json"},
-    body: JSON.stringify({url, repo, config, classes, skip_exploit}),
+    body: JSON.stringify({url, repo, repo_git_url, config, classes, skip_exploit}),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({detail: res.statusText}));

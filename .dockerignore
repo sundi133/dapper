@@ -7,8 +7,17 @@ yarn-error.log*
 # Runtime directories
 sessions/
 deliverables/
+audit-logs/
+repos/
 xben-benchmark-results/
 .claude/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
 
 # Git
 .git/

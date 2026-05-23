@@ -1,0 +1,62 @@
+# Dockerfile for the Dapper DeepAgents web app (FastAPI).
+# Separate from the main Dockerfile because the web app is Python-only and
+# bundles the DAST tooling the deep agent shells out to.
+
+FROM golang:1.23-bookworm AS gotools
+RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
+ && go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest \
+ && go install -v github.com/ffuf/ffuf/v2@latest
+
+FROM python:3.12-slim-bookworm AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# DAST tooling + minimal build deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git bash \
+      nmap whatweb sqlmap \
+      libpcap0.8 \
+      tini \
+ && rm -rf /var/lib/apt/lists/*
+
+# Copy Go-built scanners
+COPY --from=gotools /go/bin/subfinder /usr/local/bin/subfinder
+COPY --from=gotools /go/bin/nuclei    /usr/local/bin/nuclei
+COPY --from=gotools /go/bin/ffuf      /usr/local/bin/ffuf
+
+# Warm nuclei templates so first scan isn't slow
+RUN nuclei -update-templates -silent || true
+
+WORKDIR /app
+
+# Install Python deps first for layer caching
+COPY scripts/deepagents/requirements.txt /app/scripts/deepagents/requirements.txt
+RUN pip install -r /app/scripts/deepagents/requirements.txt
+
+# Playwright Chromium (optional — only pulled if you wire Playwright tools in)
+RUN python -m playwright install --with-deps chromium || true
+
+# Now copy the rest of the project
+COPY . /app
+
+# Non-root user; give it write access to volumes
+RUN groupadd -g 1001 dapper \
+ && useradd  -u 1001 -g dapper -m -s /bin/bash dapper \
+ && mkdir -p /app/audit-logs /app/repos /app/configs \
+ && chown -R dapper:dapper /app
+
+USER dapper
+
+ENV HOST=0.0.0.0 \
+    PORT=8000 \
+    PYTHONPATH=/app
+
+EXPOSE 8000
+
+# Railway sets $PORT dynamically; default to 8000 locally.
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["sh", "-c", "uvicorn scripts.deepagents.webapp:app --host 0.0.0.0 --port ${PORT:-8000}"]
