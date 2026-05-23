@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +25,7 @@ from .session import (
     list_sessions,
     start_session,
     submit_answer,
+    submit_message,
 )
 
 load_dotenv()
@@ -61,19 +64,30 @@ def list_configs():
     return {"configs": sorted(p.name for p in CONFIGS_DIR.glob("*.yaml"))}
 
 
+@app.get("/api/configs/{name}")
+def get_config(name: str):
+    """Return the raw YAML so the UI can prefill the editor when a built-in
+    config is picked."""
+    path = CONFIGS_DIR / name
+    if ".." in name or not path.exists():
+        raise HTTPException(status_code=404, detail="config not found")
+    return JSONResponse({"name": name, "content": path.read_text()})
+
+
 class StartRequest(BaseModel):
     url: str
     repo: Optional[str] = None
     repo_git_url: Optional[str] = None
     config: Optional[str] = None
+    config_yaml: Optional[str] = None  # paste-your-own YAML
     classes: Optional[list[str]] = None
     skip_exploit: bool = False
     model: str = "claude-opus-4-7"
+    initial_message: Optional[str] = None
 
 
 @app.post("/api/sessions")
 def create_session(req: StartRequest):
-    import subprocess
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY not set on server")
     if not req.url.startswith(("http://", "https://")):
@@ -81,7 +95,6 @@ def create_session(req: StartRequest):
 
     repo_name = req.repo or ""
     if req.repo_git_url:
-        # Clone-on-demand: derive repo name from URL if not provided.
         if not repo_name:
             tail = req.repo_git_url.rstrip("/").rsplit("/", 1)[-1]
             repo_name = tail[:-4] if tail.endswith(".git") else tail
@@ -108,7 +121,6 @@ def create_session(req: StartRequest):
         config_path = str(candidate)
 
     host = req.url.split("://", 1)[-1].split("/", 1)[0].replace(":", "_")
-    import time
     deliverables = str(AUDIT_DIR / f"{host}_deepagent-{int(time.time())}" / "deliverables")
 
     session = start_session(
@@ -119,6 +131,8 @@ def create_session(req: StartRequest):
         model=req.model,
         classes=req.classes,
         skip_exploit=req.skip_exploit,
+        initial_message=req.initial_message,
+        config_yaml_text=req.config_yaml,
     )
     return {
         "id": session.id,
@@ -167,6 +181,22 @@ def stream_events(sid: str):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+class MessageRequest(BaseModel):
+    message: str
+
+
+@app.post("/api/sessions/{sid}/messages")
+def post_message(sid: str, req: MessageRequest):
+    """Single chat endpoint: routes to ask_user if the agent is blocked,
+    otherwise queues as a follow-up turn."""
+    s = get_session(sid)
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="empty message")
+    return submit_message(s, req.message)
+
+
 class AnswerRequest(BaseModel):
     qid: str
     answer: str
@@ -174,6 +204,7 @@ class AnswerRequest(BaseModel):
 
 @app.post("/api/sessions/{sid}/answer")
 def answer(sid: str, req: AnswerRequest):
+    """Legacy endpoint kept for compatibility."""
     s = get_session(sid)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
@@ -223,41 +254,45 @@ INDEX_HTML = r"""<!doctype html>
 <title>Dapper DeepAgents</title>
 <style>
   :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
   body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b0d10; color:#d8dee9; margin:0; }
   header { padding:14px 22px; border-bottom:1px solid #1f2937; display:flex; gap:16px; align-items:baseline; }
   header h1 { margin:0; font-size:18px; }
   header .status { color:#9aa5b1; font-size:12px; }
-  main { display:grid; grid-template-columns: 360px 1fr; gap:0; height:calc(100vh - 51px); }
+  main { display:grid; grid-template-columns: 380px 1fr; height:calc(100vh - 51px); }
   aside { border-right:1px solid #1f2937; padding:18px; overflow:auto; }
-  section.feed { padding:0; display:flex; flex-direction:column; }
+  section.chat { display:flex; flex-direction:column; min-width:0; }
   label { display:block; margin-top:12px; font-size:12px; color:#9aa5b1; }
   input, select, button, textarea {
-    width:100%; box-sizing:border-box; padding:8px 10px; margin-top:4px;
+    width:100%; padding:8px 10px; margin-top:4px;
     background:#11151b; color:#d8dee9; border:1px solid #233040; border-radius:4px;
     font: inherit;
   }
+  textarea { font-size:12px; }
   button { background:#2563eb; border-color:#2563eb; color:white; cursor:pointer; margin-top:14px; }
   button:disabled { opacity:0.5; cursor:not-allowed; }
-  button.secondary { background:transparent; color:#9aa5b1; border-color:#233040; margin-top:6px; }
   .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
   .chip { font-size:11px; background:#1f2937; padding:3px 8px; border-radius:12px; cursor:pointer; }
   .chip.on { background:#2563eb; color:white; }
-  .events { flex:1; overflow:auto; padding:14px 18px; font-size:12px; }
-  .event { padding:6px 10px; margin-bottom:6px; border-left:3px solid #1f2937; background:#0f141a; white-space:pre-wrap; word-break:break-word; }
-  .event.kind-step { border-left-color:#2563eb; }
-  .event.kind-question { border-left-color:#f59e0b; background:#1f1809; }
-  .event.kind-error { border-left-color:#ef4444; color:#fecaca; }
-  .event.kind-status { color:#9aa5b1; }
-  .event .meta { font-size:10px; color:#6b7280; margin-bottom:2px; }
-  .qbar { border-top:1px solid #1f2937; padding:12px 18px; background:#0f141a; display:none; }
-  .qbar.on { display:block; }
-  .qbar .q { color:#f59e0b; margin-bottom:6px; }
-  .row { display:flex; gap:8px; }
-  .row textarea { flex:1; min-height:60px; }
-  .row button { width:auto; margin-top:0; align-self:stretch; }
+  .feed { flex:1; overflow:auto; padding:14px 18px; font-size:12px; }
+  .msg { padding:8px 12px; margin-bottom:8px; border-radius:6px; white-space:pre-wrap; word-break:break-word; }
+  .msg.user { background:#0f2742; border:1px solid #1d3a5f; }
+  .msg.agent { background:#0f141a; border:1px solid #1f2937; border-left:3px solid #2563eb; }
+  .msg.question { background:#1f1809; border-left:3px solid #f59e0b; }
+  .msg.tool { background:#0c1014; border-left:2px solid #374151; color:#9aa5b1; font-size:11px; }
+  .msg.error { background:#1a0d0d; border-left:3px solid #ef4444; color:#fecaca; }
+  .msg.status { color:#6b7280; font-size:11px; padding:2px 12px; background:transparent; }
+  .msg .meta { font-size:10px; color:#6b7280; margin-bottom:3px; }
+  .composer { border-top:1px solid #1f2937; padding:12px 18px; background:#0f141a; }
+  .composer .pending { color:#f59e0b; font-size:11px; margin-bottom:6px; }
+  .composer .row { display:flex; gap:8px; }
+  .composer textarea { flex:1; min-height:50px; max-height:160px; resize:vertical; margin:0; }
+  .composer button { width:auto; align-self:stretch; margin:0; padding:0 18px; }
+  .composer .hint { font-size:10px; color:#6b7280; margin-top:4px; }
   .deliverables { padding:14px 18px; border-top:1px solid #1f2937; font-size:12px; }
   .deliverables h3 { margin:0 0 8px 0; font-size:13px; color:#9aa5b1; }
-  .deliverables a { color:#60a5fa; text-decoration:none; display:block; padding:2px 0; }
+  .deliverables a { color:#60a5fa; text-decoration:none; display:block; padding:2px 0; word-break:break-all; }
+  .hidden { display:none !important; }
 </style>
 </head>
 <body>
@@ -270,31 +305,46 @@ INDEX_HTML = r"""<!doctype html>
     <div id="setup">
       <label>Target URL</label>
       <input id="url" placeholder="https://target.example" />
-      <label>Repo (./repos/... — optional for pure DAST)</label>
+      <label>Repo (optional — pure DAST if blank)</label>
       <select id="repo"><option value="">(none — pure DAST)</option></select>
       <label>Or clone a repo by git URL</label>
-      <input id="repo-git" placeholder="https://github.com/owner/repo.git (optional)" />
-      <label>Config (./configs/*.yaml)</label>
-      <select id="config"><option value="">(none)</option></select>
+      <input id="repo-git" placeholder="https://github.com/owner/repo.git" />
+
+      <label>Config source</label>
+      <select id="config-mode">
+        <option value="none">(none)</option>
+        <option value="builtin">Built-in config</option>
+        <option value="custom">Paste your own YAML</option>
+      </select>
+      <select id="config" class="hidden"></select>
+      <textarea id="config-yaml" class="hidden" rows="10" placeholder="# paste your dapper YAML config here&#10;auth:&#10;  type: form&#10;  ..."></textarea>
+
       <label>Vuln classes</label>
       <div id="classes" class="chips"></div>
       <label><input type="checkbox" id="skip-exploit" style="width:auto;margin-right:6px"/>Skip exploitation phase</label>
+
+      <label>Initial instruction (optional)</label>
+      <textarea id="initial-msg" rows="3" placeholder="e.g. Focus on the /api/v2 endpoints and skip nmap"></textarea>
+
       <button id="start">Start pentest</button>
       <div id="warn" style="color:#f87171;font-size:12px;margin-top:8px"></div>
     </div>
-    <div class="deliverables" id="del-panel" style="display:none">
+    <div class="deliverables hidden" id="del-panel">
       <h3>Deliverables</h3>
       <div id="del-list"></div>
     </div>
   </aside>
-  <section class="feed">
-    <div class="events" id="events"></div>
-    <div class="qbar" id="qbar">
-      <div class="q" id="qtext"></div>
+  <section class="chat">
+    <div class="feed" id="feed">
+      <div class="msg status">Configure on the left and click "Start pentest" to begin a chat with the agent.</div>
+    </div>
+    <div class="composer">
+      <div class="pending hidden" id="pending">Agent is asking:</div>
       <div class="row">
-        <textarea id="qans" placeholder="Your answer..."></textarea>
-        <button id="qsend">Send</button>
+        <textarea id="composer-input" placeholder="Chat with the agent..." disabled></textarea>
+        <button id="send" disabled>Send</button>
       </div>
+      <div class="hint">Cmd/Ctrl+Enter to send · Your messages answer pending questions or queue as follow-up instructions for the agent's next turn.</div>
     </div>
   </section>
 </main>
@@ -302,7 +352,7 @@ INDEX_HTML = r"""<!doctype html>
 <script>
 const CLASSES = ["injection","xss","auth","authz","ssrf","client-side","session-mgmt","api-testing","business-logic","crypto","config-deploy","error-handling","info-gathering","web-attacks"];
 let session = null;
-let currentQid = null;
+let pendingQid = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -318,19 +368,11 @@ function renderClasses() {
     el.appendChild(chip);
   }
 }
-function selectedClasses() {
-  return Array.from(document.querySelectorAll("#classes .chip.on")).map(c => c.dataset.cls);
-}
+const selectedClasses = () => Array.from(document.querySelectorAll("#classes .chip.on")).map(c => c.dataset.cls);
 
 async function loadOptions() {
   const repos = await (await fetch("/api/repos")).json();
   const repoSel = $("repo");
-  repoSel.innerHTML = "";
-  if (!repos.repos.length) {
-    const o = document.createElement("option");
-    o.value = ""; o.textContent = "(no repos under ./repos/ — create one first)";
-    repoSel.appendChild(o);
-  }
   for (const r of repos.repos) {
     const o = document.createElement("option");
     o.value = r; o.textContent = r;
@@ -338,51 +380,96 @@ async function loadOptions() {
   }
   const configs = await (await fetch("/api/configs")).json();
   const cfgSel = $("config");
+  cfgSel.innerHTML = "";
   for (const c of configs.configs) {
     const o = document.createElement("option");
     o.value = c; o.textContent = c;
     cfgSel.appendChild(o);
   }
+  if (!configs.configs.length) {
+    const o = document.createElement("option");
+    o.value = ""; o.textContent = "(no built-in configs)";
+    cfgSel.appendChild(o);
+  }
   const health = await (await fetch("/api/health")).json();
   if (!health.anthropic_key_set) {
-    $("warn").textContent = "WARN: ANTHROPIC_API_KEY not set on server. Add it to .env and restart.";
+    $("warn").textContent = "WARN: ANTHROPIC_API_KEY not set on server.";
   }
 }
 
-function addEvent(evt) {
+$("config-mode").onchange = async (e) => {
+  const mode = e.target.value;
+  $("config").classList.toggle("hidden", mode !== "builtin");
+  $("config-yaml").classList.toggle("hidden", mode !== "custom");
+  if (mode === "builtin" && $("config").value) {
+    // Prefill custom area in case the user wants to fork it later
+    try {
+      const data = await (await fetch(`/api/configs/${$("config").value}`)).json();
+      $("config-yaml").value = data.content;
+    } catch {}
+  }
+};
+$("config").onchange = async (e) => {
+  if (!e.target.value) return;
+  try {
+    const data = await (await fetch(`/api/configs/${e.target.value}`)).json();
+    $("config-yaml").value = data.content;
+  } catch {}
+};
+
+function addMsg(cls, text, meta) {
   const div = document.createElement("div");
-  div.className = "event kind-" + evt.kind;
-  const meta = document.createElement("div");
-  meta.className = "meta";
-  const ts = new Date(evt.ts * 1000).toLocaleTimeString();
-  meta.textContent = `[${ts}] ${evt.kind}` + (evt.role ? ` · ${evt.role}` : "");
-  div.appendChild(meta);
+  div.className = "msg " + cls;
+  if (meta) {
+    const m = document.createElement("div");
+    m.className = "meta";
+    m.textContent = meta;
+    div.appendChild(m);
+  }
   const body = document.createElement("div");
-  let text = "";
-  if (evt.kind === "step") text = evt.content;
-  else if (evt.kind === "question") text = evt.question;
-  else if (evt.kind === "answer") text = evt.answer;
-  else if (evt.kind === "error") text = evt.message + "\n\n" + (evt.traceback || "");
-  else if (evt.kind === "status") text = "status: " + evt.status;
-  else if (evt.kind === "log") text = evt.line;
-  else text = JSON.stringify(evt);
   body.textContent = text;
   div.appendChild(body);
-  const feed = $("events");
+  const feed = $("feed");
   feed.appendChild(div);
   feed.scrollTop = feed.scrollHeight;
 }
 
-function showQuestion(qid, question) {
-  currentQid = qid;
-  $("qtext").textContent = question;
-  $("qans").value = "";
-  $("qbar").classList.add("on");
-  $("qans").focus();
+function setPending(question) {
+  if (question) {
+    pendingQid = true;
+    $("pending").classList.remove("hidden");
+    $("pending").textContent = "Agent is asking: " + question;
+    $("composer-input").placeholder = "Reply to the agent's question...";
+    $("composer-input").focus();
+  } else {
+    pendingQid = null;
+    $("pending").classList.add("hidden");
+    $("composer-input").placeholder = "Chat with the agent...";
+  }
 }
-function hideQuestion() {
-  currentQid = null;
-  $("qbar").classList.remove("on");
+
+function handleEvent(evt) {
+  const ts = new Date(evt.ts * 1000).toLocaleTimeString();
+  if (evt.kind === "heartbeat") return;
+  if (evt.kind === "step") {
+    const role = evt.role || "agent";
+    const cls = role === "tool" ? "tool" : "agent";
+    addMsg(cls, evt.content, `${ts} · ${role}`);
+  } else if (evt.kind === "question") {
+    addMsg("question", evt.question, `${ts} · agent asks`);
+    setPending(evt.question);
+  } else if (evt.kind === "user") {
+    addMsg("user", evt.message, `${ts} · you (${evt.kind === "answer" ? "answered" : evt.kind || "msg"})`);
+    if (evt.kind === "answer") setPending(null);
+  } else if (evt.kind === "log") {
+    addMsg("status", evt.line, ts);
+  } else if (evt.kind === "status") {
+    addMsg("status", `status: ${evt.status}`, ts);
+    if (evt.status === "running") $("composer-input").placeholder = "Agent is working... your message will queue for the next turn.";
+    if (evt.status === "idle") $("composer-input").placeholder = "Chat with the agent...";
+  } else if (evt.kind === "error") {
+    addMsg("error", evt.message + (evt.traceback ? "\n\n" + evt.traceback : ""), `${ts} · error`);
+  }
 }
 
 async function refreshDeliverables() {
@@ -397,24 +484,31 @@ async function refreshDeliverables() {
     a.textContent = `${f.path} (${f.bytes}b)`;
     list.appendChild(a);
   }
-  $("del-panel").style.display = data.files.length ? "block" : "none";
+  $("del-panel").classList.toggle("hidden", !data.files.length);
 }
 
 $("start").onclick = async () => {
   const url = $("url").value.trim();
-  const repo = $("repo").value || null;
-  const repo_git_url = $("repo-git").value.trim() || null;
-  const config = $("config").value || null;
-  const classes = selectedClasses();
-  const skip_exploit = $("skip-exploit").checked;
-  if (!url) { $("warn").textContent = "URL is required"; return; }
+  if (!url) { $("warn").textContent = "Target URL is required"; return; }
+  const mode = $("config-mode").value;
+  const body = {
+    url,
+    repo: $("repo").value || null,
+    repo_git_url: $("repo-git").value.trim() || null,
+    config: mode === "builtin" ? ($("config").value || null) : null,
+    config_yaml: mode === "custom" ? ($("config-yaml").value.trim() || null) : null,
+    classes: selectedClasses(),
+    skip_exploit: $("skip-exploit").checked,
+    initial_message: $("initial-msg").value.trim() || null,
+  };
   $("warn").textContent = "";
   $("start").disabled = true;
-  $("events").innerHTML = "";
+  $("feed").innerHTML = "";
+
   const res = await fetch("/api/sessions", {
     method: "POST",
     headers: {"content-type":"application/json"},
-    body: JSON.stringify({url, repo, repo_git_url, config, classes, skip_exploit}),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({detail: res.statusText}));
@@ -424,34 +518,44 @@ $("start").onclick = async () => {
   }
   const data = await res.json();
   session = data.id;
-  $("hdr-status").textContent = `session ${session} · ${data.deliverables}`;
+  $("hdr-status").textContent = `session ${session}`;
+  if (body.initial_message) addMsg("user", body.initial_message, `you · initial`);
+  $("composer-input").disabled = false;
+  $("send").disabled = false;
+
   const es = new EventSource(`/api/sessions/${session}/events`);
   es.onmessage = (m) => {
     const evt = JSON.parse(m.data);
-    if (evt.kind === "heartbeat") return;
-    addEvent(evt);
-    if (evt.kind === "question") showQuestion(evt.qid, evt.question);
-    if (evt.kind === "answer") hideQuestion();
-    if (evt.kind === "status" && (evt.status === "done" || evt.status === "error")) {
-      es.close();
-      $("start").disabled = false;
-      refreshDeliverables();
-    }
-    if (evt.kind === "step") refreshDeliverables();
+    handleEvent(evt);
+    if (evt.kind === "step" || evt.kind === "status") refreshDeliverables();
+    if (evt.kind === "status" && evt.status === "error") es.close();
   };
   es.onerror = () => { $("hdr-status").textContent = `session ${session} · stream closed`; };
 };
 
-$("qsend").onclick = async () => {
-  if (!currentQid || !session) return;
-  const ans = $("qans").value;
-  await fetch(`/api/sessions/${session}/answer`, {
+async function sendChat() {
+  const msg = $("composer-input").value.trim();
+  if (!msg || !session) return;
+  $("composer-input").value = "";
+  // Optimistic local echo handled by the server's "user" event broadcast.
+  const res = await fetch(`/api/sessions/${session}/messages`, {
     method: "POST",
     headers: {"content-type":"application/json"},
-    body: JSON.stringify({qid: currentQid, answer: ans}),
+    body: JSON.stringify({message: msg}),
   });
-  hideQuestion();
-};
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({detail: res.statusText}));
+    addMsg("error", "Send failed: " + (err.detail || res.statusText));
+  }
+}
+
+$("send").onclick = sendChat;
+$("composer-input").addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    e.preventDefault();
+    sendChat();
+  }
+});
 
 renderClasses();
 loadOptions();

@@ -1,13 +1,18 @@
 """In-process session manager for web-driven DeepAgents runs.
 
 Each Session runs the deep agent on a background thread, publishes events to
-a thread-safe queue (consumed by an SSE endpoint), and exposes a
-question/answer channel so the agent's `ask_user` tool can pause for human
-input via the web UI instead of stdin.
+a thread-safe queue (consumed by an SSE endpoint), and supports two kinds of
+human input over a single chat channel:
+
+  1. Answers to `ask_user` tool calls (the agent is blocked waiting).
+  2. Free-form follow-up messages from the operator after the agent finishes
+     a turn — these get appended to the message history and the agent is
+     re-invoked, giving a multi-turn chat experience.
 """
 from __future__ import annotations
 
 import json
+import tempfile
 import threading
 import time
 import traceback
@@ -47,10 +52,13 @@ class Session:
     model: str
     classes: list[str]
     skip_exploit: bool
-    status: str = "pending"  # pending | running | done | error
+    initial_message: str
+    status: str = "pending"  # pending | running | idle | done | error
     error: Optional[str] = None
     events: Queue = field(default_factory=Queue)
     pending_question: Optional[PendingQuestion] = None
+    followup_queue: Queue = field(default_factory=Queue)
+    wakeup: threading.Event = field(default_factory=threading.Event)
     lock: threading.Lock = field(default_factory=threading.Lock)
     thread: Optional[threading.Thread] = None
     started_at: float = field(default_factory=time.time)
@@ -89,7 +97,40 @@ def register_session(s: Session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# ask_user replacement that routes through the web UI
+# Chat input — routes either to a pending question or the followup queue
+# ---------------------------------------------------------------------------
+
+def submit_message(session: Session, message: str) -> dict[str, Any]:
+    """Send a user message. If the agent is blocked on ask_user, answer it.
+    Otherwise queue as a follow-up for the next agent turn.
+    """
+    with session.lock:
+        pq = session.pending_question
+    if pq:
+        pq.answer = message
+        pq.answer_event.set()
+        session.emit("user", message=message, kind="answer", qid=pq.qid)
+        return {"routed": "answer"}
+    session.followup_queue.put(message)
+    session.wakeup.set()
+    session.emit("user", message=message, kind="followup")
+    return {"routed": "followup"}
+
+
+def submit_answer(session: Session, qid: str, answer: str) -> bool:
+    """Backwards-compat shim for the old answer endpoint."""
+    with session.lock:
+        pq = session.pending_question
+    if not pq or pq.qid != qid:
+        return False
+    pq.answer = answer
+    pq.answer_event.set()
+    session.emit("user", message=answer, kind="answer", qid=qid)
+    return True
+
+
+# ---------------------------------------------------------------------------
+# ask_user tool (routes through the web UI's chat channel)
 # ---------------------------------------------------------------------------
 
 def make_ask_user_tool(session: Session):
@@ -100,13 +141,12 @@ def make_ask_user_tool(session: Session):
         Use this when you need information you don't have: credentials, an OTP,
         scope clarification, permission to run an intrusive probe, etc. Keep
         questions short and specific. The call blocks until the operator
-        answers in the UI.
+        sends a chat message.
         """
         pq = PendingQuestion(qid=uuid.uuid4().hex[:12], question=question)
         with session.lock:
             session.pending_question = pq
         session.emit("question", qid=pq.qid, question=question)
-        # Block until the UI answers (or 1h timeout).
         answered = pq.answer_event.wait(timeout=3600)
         with session.lock:
             session.pending_question = None
@@ -117,19 +157,8 @@ def make_ask_user_tool(session: Session):
     return ask_user
 
 
-def submit_answer(session: Session, qid: str, answer: str) -> bool:
-    with session.lock:
-        pq = session.pending_question
-    if not pq or pq.qid != qid:
-        return False
-    pq.answer = answer
-    pq.answer_event.set()
-    session.emit("answer", qid=qid, answer=answer)
-    return True
-
-
 # ---------------------------------------------------------------------------
-# Run the deep agent on a background thread
+# Agent execution
 # ---------------------------------------------------------------------------
 
 VULN_CLASSES = [
@@ -163,6 +192,31 @@ def _build_subagents(classes: list[str], skip_exploit: bool, vars_: dict[str, st
     return subs
 
 
+def _stream_turn(session: Session, agent, messages: list[dict[str, Any]]) -> list[Any]:
+    """Run one agent turn, emit step events, return the updated message list."""
+    final_messages: list[Any] = []
+    try:
+        for chunk in agent.stream({"messages": messages}, stream_mode="values"):
+            msgs = chunk.get("messages", []) if isinstance(chunk, dict) else []
+            if not msgs:
+                continue
+            final_messages = msgs
+            last = msgs[-1]
+            content = getattr(last, "content", "")
+            role = getattr(last, "type", "msg")
+            if isinstance(content, list):
+                content = json.dumps(content)[:4000]
+            if content:
+                session.emit("step", role=role, content=str(content)[:4000])
+    except AttributeError:
+        result = agent.invoke({"messages": messages})
+        final_messages = result.get("messages", [])
+        if final_messages:
+            last = final_messages[-1]
+            session.emit("step", role="final", content=str(getattr(last, "content", last))[:4000])
+    return final_messages
+
+
 def _run_agent(session: Session) -> None:
     try:
         from deepagents import create_deep_agent
@@ -188,7 +242,7 @@ def _run_agent(session: Session) -> None:
             "API_SCHEMAS": "",
             "CONFIG_CONTEXT": config_context,
             "LOGIN_INSTRUCTIONS": login_instructions,
-            "REPO": session.repo,
+            "REPO": session.repo or "(none)",
             "DELIVERABLES_DIR": session.deliverables,
         }
 
@@ -203,7 +257,7 @@ def _run_agent(session: Session) -> None:
 
 # Orchestration rules
 - Target: {session.url}
-- Local repo (for code-assisted DAST): ./repos/{session.repo}
+- Local repo (for code-assisted DAST): ./repos/{session.repo or '(none — pure DAST)'}
 - Persist every finding via `write_finding` into: {session.deliverables}
 - Phase 1: recon (whatweb, subfinder, nmap, nuclei, http_get).
 - Phase 2: dispatch one vuln subagent per relevant class — in parallel.
@@ -214,6 +268,9 @@ def _run_agent(session: Session) -> None:
 - Use the `ask_user` tool whenever you need creds, scope, OTPs, or
   confirmation before an intrusive probe. The operator is at a web UI; keep
   questions short and specific.
+- The operator can also send free-form chat messages between turns to
+  redirect, ask questions, or change priorities — treat them as authoritative
+  instructions.
 
 # Config (may be empty)
 {config_context or '(no config provided)'}
@@ -226,35 +283,35 @@ def _run_agent(session: Session) -> None:
             subagents=subagents,
         )
 
-        initial = (
-            f"Conduct a full DAST pentest of {session.url}. Repo: {session.repo}. "
-            f"Write all deliverables to {session.deliverables}. "
-            "Start with recon, then dispatch the vulnerability subagents you judge "
-            "relevant. Use `ask_user` whenever you need information from the "
-            "operator. End by writing 00-executive-summary.md."
-        )
+        messages: list[Any] = [{"role": "user", "content": session.initial_message}]
 
-        # Stream agent steps via .stream so the UI sees progress.
-        try:
-            for chunk in agent.stream({"messages": [{"role": "user", "content": initial}]}, stream_mode="values"):
-                msgs = chunk.get("messages", []) if isinstance(chunk, dict) else []
-                if not msgs:
-                    continue
-                last = msgs[-1]
-                content = getattr(last, "content", "")
-                role = getattr(last, "type", "msg")
-                if isinstance(content, list):
-                    content = json.dumps(content)[:4000]
-                if content:
-                    session.emit("step", role=role, content=str(content)[:4000])
-        except AttributeError:
-            # Fallback if the installed deepagents version lacks .stream
-            result = agent.invoke({"messages": [{"role": "user", "content": initial}]})
-            final = result["messages"][-1]
-            session.emit("step", role="final", content=str(getattr(final, "content", final))[:4000])
+        # Multi-turn loop: run agent, then wait for follow-up messages.
+        while True:
+            messages = _stream_turn(session, agent, messages)
 
-        session.status = "done"
-        session.emit("status", status="done")
+            session.status = "idle"
+            session.emit("status", status="idle")
+
+            # Wait for a follow-up message or until the user closes the session.
+            session.wakeup.clear()
+            session.wakeup.wait()  # blocks until submit_message sets it
+
+            # Drain queued follow-ups.
+            followups: list[str] = []
+            while True:
+                try:
+                    followups.append(session.followup_queue.get_nowait())
+                except Empty:
+                    break
+            if not followups:
+                continue
+
+            for m in followups:
+                messages.append({"role": "user", "content": m})
+
+            session.status = "running"
+            session.emit("status", status="running")
+
     except Exception as e:
         session.status = "error"
         session.error = f"{type(e).__name__}: {e}"
@@ -270,8 +327,28 @@ def start_session(
     model: str = "claude-opus-4-7",
     classes: Optional[list[str]] = None,
     skip_exploit: bool = False,
+    initial_message: Optional[str] = None,
+    config_yaml_text: Optional[str] = None,
 ) -> Session:
     Path(deliverables).mkdir(parents=True, exist_ok=True)
+
+    # If the user pasted YAML inline, persist it to a temp file alongside
+    # deliverables so the run is reproducible.
+    if config_yaml_text and not config_path:
+        tmp = Path(deliverables) / "custom-config.yaml"
+        tmp.write_text(config_yaml_text)
+        config_path = str(tmp)
+
+    if not initial_message:
+        initial_message = (
+            f"Conduct a full DAST pentest of {url}."
+            + (f" Repo: {repo}." if repo else " (No local repo — pure DAST.)")
+            + f" Write all deliverables to {deliverables}."
+            " Start with recon, then dispatch the vulnerability subagents you judge"
+            " relevant. Use `ask_user` whenever you need information from the operator."
+            " End by writing 00-executive-summary.md."
+        )
+
     session = Session(
         id=uuid.uuid4().hex[:12],
         url=url,
@@ -281,6 +358,7 @@ def start_session(
         model=model,
         classes=classes or VULN_CLASSES,
         skip_exploit=skip_exploit,
+        initial_message=initial_message,
     )
     register_session(session)
     session.emit("status", status="pending")
@@ -298,12 +376,11 @@ def drain_events(session: Session, timeout: float = 15.0):
             evt = session.events.get(timeout=1.0)
             yield evt
             deadline = time.time() + timeout
-            if evt.get("kind") == "status" and evt.get("status") in ("done", "error"):
+            if evt.get("kind") == "status" and evt.get("status") == "error":
                 return
         except Empty:
-            if session.status in ("done", "error") and session.events.empty():
+            if session.status == "error" and session.events.empty():
                 return
             if time.time() > deadline:
-                # heartbeat
                 yield {"ts": time.time(), "kind": "heartbeat"}
                 deadline = time.time() + timeout
