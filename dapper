@@ -29,6 +29,8 @@ Usage:
   ./dapper deepagent [URL=<url>] [REPO=<name>] [CONFIG=<file>]
                                          Run via LangChain DeepAgents orchestrator
                                          (interactive setup if args missing)
+  ./dapper web [HOST=0.0.0.0] [PORT=8000]
+                                         Launch DeepAgents web UI (FastAPI)
   ./dapper logs ID=<workflow-id>         Tail logs for a specific workflow
   ./dapper query ID=<workflow-id>        Query workflow progress
   ./dapper stop                          Stop all containers
@@ -310,6 +312,20 @@ cmd_stop() {
   fi
 }
 
+cmd_web() {
+  parse_args "$@"
+
+  if [ -z "$ANTHROPIC_API_KEY" ] && [ -f .env ]; then
+    set -a; source .env; set +a
+  fi
+
+  PY=${PYTHON:-python3}
+  HOST_=${HOST:-0.0.0.0}
+  PORT_=${PORT:-8000}
+  echo "Dapper DeepAgents web UI -> http://${HOST_}:${PORT_}"
+  exec "$PY" -m uvicorn scripts.deepagents.webapp:app --host "$HOST_" --port "$PORT_"
+}
+
 cmd_deepagent() {
   parse_args "$@"
 
@@ -351,6 +367,10 @@ case "${1:-help}" in
   deepagent)
     shift
     cmd_deepagent "$@"
+    ;;
+  web)
+    shift
+    cmd_web "$@"
     ;;
   help|--help|-h|*)
     show_help
