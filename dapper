@@ -25,7 +25,9 @@ show_help() {
            AI Penetration Testing Framework
 
 Usage:
-  ./dapper start URL=<url> REPO=<name>   Start a pentest workflow
+  ./dapper start URL=<url> REPO=<name>   Start a pentest workflow (Temporal)
+  ./dapper deepagent URL=<url> REPO=<name>
+                                         Run via LangChain DeepAgents orchestrator
   ./dapper logs ID=<workflow-id>         Tail logs for a specific workflow
   ./dapper query ID=<workflow-id>        Query workflow progress
   ./dapper stop                          Stop all containers
@@ -307,6 +309,34 @@ cmd_stop() {
   fi
 }
 
+cmd_deepagent() {
+  parse_args "$@"
+
+  if [ -z "$URL" ] || [ -z "$REPO" ]; then
+    echo "Usage: ./dapper deepagent URL=<url> REPO=<name> [OUTPUT=<dir>] [CLASSES=xss,injection,...] [SKIP_EXPLOIT=true]"
+    exit 1
+  fi
+
+  if [ -z "$ANTHROPIC_API_KEY" ]; then
+    echo "ERROR: ANTHROPIC_API_KEY not set (add it to .env)"
+    exit 1
+  fi
+
+  TS=$(date +%s)
+  HOST=$(echo "$URL" | sed -E 's#https?://##; s#/.*##; s/[^a-zA-Z0-9.-]/_/g')
+  OUTDIR="${OUTPUT:-./audit-logs}/${HOST}_deepagent-${TS}/deliverables"
+  mkdir -p "$OUTDIR"
+
+  PY=${PYTHON:-python3}
+  EXTRA=()
+  [ -n "$CLASSES" ] && EXTRA+=(--classes "$CLASSES")
+  [ "$SKIP_EXPLOIT" = "true" ] && EXTRA+=(--skip-exploit)
+
+  echo "Launching DeepAgents orchestrator -> $OUTDIR"
+  "$PY" -m scripts.deepagents.orchestrator \
+    --url "$URL" --repo "$REPO" --deliverables "$OUTDIR" "${EXTRA[@]}"
+}
+
 # Main command dispatch
 case "${1:-help}" in
   start)
@@ -324,6 +354,10 @@ case "${1:-help}" in
   stop)
     shift
     cmd_stop "$@"
+    ;;
+  deepagent)
+    shift
+    cmd_deepagent "$@"
     ;;
   help|--help|-h|*)
     show_help
