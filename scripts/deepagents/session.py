@@ -177,7 +177,7 @@ def _build_subagents(classes: list[str], skip_exploit: bool, vars_: dict[str, st
         subs.append({
             "name": f"{vc}-vuln",
             "description": f"Hunt for {vc} vulnerabilities.",
-            "prompt": load_prompt(f"vuln-{vc}", vars_),
+            "system_prompt": load_prompt(f"vuln-{vc}", vars_),
             "tools": tool_names,
         })
         if skip_exploit:
@@ -186,7 +186,7 @@ def _build_subagents(classes: list[str], skip_exploit: bool, vars_: dict[str, st
             subs.append({
                 "name": f"{vc}-exploit",
                 "description": f"Exploit confirmed {vc} vulnerabilities (proof only).",
-                "prompt": load_prompt(f"exploit-{vc}", vars_),
+                "system_prompt": load_prompt(f"exploit-{vc}", vars_),
                 "tools": tool_names,
             })
     return subs
@@ -365,7 +365,7 @@ def _run_agent(session: Session) -> None:
         agent = create_deep_agent(
             model=session.model,
             tools=tools,
-            instructions=planner_instructions,
+            system_prompt=planner_instructions,
             subagents=subagents,
         )
 

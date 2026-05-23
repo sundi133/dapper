@@ -57,7 +57,7 @@ def build_subagent(vuln_class: str, vars_: dict[str, str], tool_names: list[str]
     return {
         "name": f"{vuln_class}-vuln",
         "description": f"Hunt for {vuln_class} vulnerabilities against the target.",
-        "prompt": prompt,
+        "system_prompt": prompt,
         "tools": tool_names,
     }
 
@@ -70,7 +70,7 @@ def build_exploit_subagent(vuln_class: str, vars_: dict[str, str], tool_names: l
     return {
         "name": f"{vuln_class}-exploit",
         "description": f"Exploit confirmed {vuln_class} vulnerabilities (proof only).",
-        "prompt": prompt,
+        "system_prompt": prompt,
         "tools": tool_names,
     }
 
@@ -169,7 +169,7 @@ def main() -> int:
     agent = create_deep_agent(
         model=args.model,
         tools=tools,
-        instructions=planner_instructions,
+        system_prompt=planner_instructions,
         subagents=subagents,
     )
 
