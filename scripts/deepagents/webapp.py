@@ -544,6 +544,13 @@ INDEX_HTML = r"""<!doctype html>
 
       <button id="start">Start pentest</button>
       <div id="warn" style="color:#f87171;font-size:12px;margin-top:8px"></div>
+
+      <div class="recent-scans">
+        <h3>Recent scans <span class="count" id="recent-count"></span></h3>
+        <div id="recent-list">
+          <div class="empty">Loading…</div>
+        </div>
+      </div>
     </div>
     <div class="deliverables hidden" id="del-panel">
       <div class="head">
@@ -839,15 +846,23 @@ function makeFileRow(f) {
   return row;
 }
 
+// Source of deliverable files: either a live session or a historical scan.
+// Set to `/api/sessions/<sid>` while a session is active, or
+// `/api/scans/<folder>` when viewing a historical scan in read-only mode.
+let deliverablesBase = null;
+let viewingHistorical = false;
+
 async function refreshDeliverables() {
-  if (!session) return;
-  const data = await (await fetch(`/api/sessions/${session}/deliverables`)).json();
+  if (!deliverablesBase) return;
+  const data = await (await fetch(`${deliverablesBase}/deliverables`)).json();
   const list = $("del-list");
   list.innerHTML = "";
   if (!data.files.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.innerHTML = 'No reports yet. The agent will write findings here as it works — the <strong>executive summary</strong> appears when the run completes.';
+    empty.innerHTML = viewingHistorical
+      ? 'This scan completed with no deliverables on disk.'
+      : 'No reports yet. The agent will write findings here as it works — the <strong>executive summary</strong> appears when the run completes.';
     list.appendChild(empty);
     $("dl-zip").disabled = true;
     return;
@@ -864,6 +879,7 @@ async function refreshDeliverables() {
 
 let currentViewerPath = null;
 async function openViewer(path) {
+  if (!deliverablesBase) return;
   currentViewerPath = path;
   $("viewer-title").textContent = path;
   $("viewer-backdrop").classList.remove("hidden");
@@ -871,7 +887,7 @@ async function openViewer(path) {
   body.className = "vbody";
   body.textContent = "Loading…";
   try {
-    const data = await (await fetch(`/api/sessions/${session}/deliverables/${encodeURIComponent(path)}`)).json();
+    const data = await (await fetch(`${deliverablesBase}/deliverables/${encodeURIComponent(path)}`)).json();
     if (/\.md$/i.test(path)) {
       body.innerHTML = renderMd(data.content || "(empty)");
     } else {
@@ -889,19 +905,21 @@ function closeViewer() {
 $("viewer-close").onclick = closeViewer;
 $("viewer-backdrop").onclick = (e) => { if (e.target.id === "viewer-backdrop") closeViewer(); };
 $("viewer-download").onclick = () => {
-  if (!currentViewerPath || !session) return;
+  if (!currentViewerPath || !deliverablesBase) return;
   const a = document.createElement("a");
-  a.href = `/api/sessions/${session}/deliverables/${encodeURIComponent(currentViewerPath)}`;
+  a.href = `${deliverablesBase}/deliverables/${encodeURIComponent(currentViewerPath)}`;
   a.target = "_blank";
   a.click();
 };
 $("dl-zip").onclick = () => {
-  if (!session) return;
-  window.location.href = `/api/sessions/${session}/deliverables.zip`;
+  if (!deliverablesBase) return;
+  window.location.href = `${deliverablesBase}/deliverables.zip`;
 };
-$("new-session-btn").onclick = () => {
-  if (!confirm("Start a new pentest? The current chat will be cleared (the session keeps running in the background).")) return;
+
+function resetToSetup() {
   session = null;
+  deliverablesBase = null;
+  viewingHistorical = false;
   $("session-info").classList.add("hidden");
   $("setup").classList.remove("hidden");
   $("del-panel").classList.add("hidden");
@@ -910,7 +928,93 @@ $("new-session-btn").onclick = () => {
   $("composer-input").disabled = true;
   $("send").disabled = true;
   $("start").disabled = false;
+  loadRecentScans();
+}
+
+$("new-session-btn").onclick = () => {
+  if (!confirm("Return to the home screen? Any running scan keeps running in the background and will show up under Recent scans.")) return;
+  resetToSetup();
 };
+
+// ---- Historical scans ----
+function fmtRelTime(epochSec) {
+  if (!epochSec) return "";
+  const d = new Date(epochSec * 1000);
+  const diff = (Date.now() / 1000) - epochSec;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+  if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+  if (diff < 86400 * 30) return Math.floor(diff / 86400) + "d ago";
+  return d.toLocaleDateString();
+}
+
+async function loadRecentScans() {
+  const list = $("recent-list");
+  list.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const data = await (await fetch("/api/scans")).json();
+    const scans = data.scans || [];
+    $("recent-count").textContent = scans.length ? `(${scans.length})` : "";
+    list.innerHTML = "";
+    if (!scans.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "No past scans yet. They'll appear here after your first run.";
+      list.appendChild(empty);
+      return;
+    }
+    for (const s of scans) {
+      const row = document.createElement("div");
+      row.className = "scan-row";
+      row.onclick = () => openHistoricalScan(s);
+      const top = document.createElement("div");
+      top.className = "top";
+      const url = document.createElement("span");
+      url.className = "url";
+      url.textContent = s.url || s.scan_id;
+      top.appendChild(url);
+      if (s.live) {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = "live";
+        top.appendChild(badge);
+      }
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      const left = document.createElement("span");
+      left.textContent = fmtRelTime(s.started_at) + (s.repo ? ` · ${s.repo}` : "");
+      const right = document.createElement("span");
+      right.textContent = `${s.file_count} file${s.file_count === 1 ? "" : "s"}`;
+      meta.appendChild(left);
+      meta.appendChild(right);
+      row.appendChild(top);
+      row.appendChild(meta);
+      list.appendChild(row);
+    }
+  } catch (e) {
+    list.innerHTML = '<div class="empty">Failed to load recent scans.</div>';
+  }
+}
+
+function openHistoricalScan(scan) {
+  // Read-only view: no SSE stream, no composer, just the deliverables panel.
+  session = null;
+  deliverablesBase = `/api/scans/${encodeURIComponent(scan.scan_id)}`;
+  viewingHistorical = true;
+  $("setup").classList.add("hidden");
+  $("session-info").classList.remove("hidden");
+  $("del-panel").classList.remove("hidden");
+  $("si-url").textContent = scan.url || scan.scan_id;
+  $("si-repo").textContent = scan.repo || "(none — pure DAST)";
+  $("si-status").textContent = scan.live ? "live (read-only view)" : "finished";
+  $("setup-readonly").textContent = `scan id: ${scan.scan_id}\nstarted: ${new Date((scan.started_at || 0) * 1000).toLocaleString()}`;
+  $("hdr-status").textContent = `viewing ${scan.scan_id}`;
+  $("feed").innerHTML = '<div class="msg status">Read-only view of a past scan. Open the reports on the left, or click "New pentest" to return to the home screen.</div>';
+  $("composer-input").disabled = true;
+  $("send").disabled = true;
+  $("composer-input").placeholder = "Chat is disabled for historical scans.";
+  refreshDeliverables();
+}
 
 $("start").onclick = async () => {
   const url = $("url").value.trim();
@@ -943,6 +1047,8 @@ $("start").onclick = async () => {
   }
   const data = await res.json();
   session = data.id;
+  deliverablesBase = `/api/sessions/${session}`;
+  viewingHistorical = false;
   $("hdr-status").textContent = `session ${session.slice(0, 12)}`;
   // Swap sidebar into session mode.
   $("setup").classList.add("hidden");
@@ -994,6 +1100,12 @@ $("composer-input").addEventListener("keydown", (e) => {
 
 renderClasses();
 loadOptions();
+loadRecentScans();
+// Refresh the recent-scans list every 30s while the setup screen is visible,
+// so a scan running in another tab/process eventually shows up.
+setInterval(() => {
+  if (!session && !viewingHistorical) loadRecentScans();
+}, 30000);
 </script>
 </body>
 </html>
