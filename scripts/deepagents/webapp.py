@@ -64,9 +64,17 @@ _SESSION_SECRET = (
 ).encode()
 
 
-def _auth_required() -> Optional[str]:
+def _auth_required() -> Optional[tuple[str, str]]:
+    """Return (username, password) if the gate is on, else None.
+
+    The gate turns on when DAPPER_WEB_PASSWORD is set. DAPPER_WEB_USERNAME
+    defaults to 'admin' so a password alone is enough to enable auth.
+    """
     pw = os.environ.get("DAPPER_WEB_PASSWORD") or ""
-    return pw if pw else None
+    if not pw:
+        return None
+    user = os.environ.get("DAPPER_WEB_USERNAME") or "admin"
+    return (user, pw)
 
 
 def _sign_session(exp_unix: int) -> str:
@@ -103,8 +111,7 @@ _AUTH_EXEMPT_PATHS = {"/login", "/api/login", "/api/logout", "/api/health", "/ap
 
 @app.middleware("http")
 async def _password_gate(request: Request, call_next):
-    pw = _auth_required()
-    if pw is None:
+    if _auth_required() is None:
         return await call_next(request)
 
     path = request.url.path
@@ -131,18 +138,24 @@ async def _password_gate(request: Request, call_next):
 
 
 class LoginRequest(BaseModel):
+    username: str = ""
     password: str
 
 
 @app.post("/api/login")
 def login(req: LoginRequest):
-    pw = _auth_required()
-    if pw is None:
+    creds = _auth_required()
+    if creds is None:
         # Login endpoint is meaningless when auth is disabled — return 204
         # so the UI can detect "no password set" and skip the login page.
         return Response(status_code=204)
-    if not hmac.compare_digest(req.password.encode(), pw.encode()):
-        raise HTTPException(status_code=401, detail="invalid password")
+    expected_user, expected_pw = creds
+    # Constant-time on both fields. We OR the results so a bad username
+    # doesn't short-circuit the password check (timing-wise).
+    user_ok = hmac.compare_digest(req.username.encode(), expected_user.encode())
+    pw_ok = hmac.compare_digest(req.password.encode(), expected_pw.encode())
+    if not (user_ok and pw_ok):
+        raise HTTPException(status_code=401, detail="invalid username or password")
     exp = int(time.time()) + SESSION_TTL_SECONDS
     resp = JSONResponse({"ok": True})
     resp.set_cookie(
@@ -1838,9 +1851,11 @@ LOGIN_HTML = """<!doctype html>
 </head><body>
 <form class="card" id="f">
   <h1>Dapper × DeepAgents</h1>
-  <div class="sub">This instance requires a password.</div>
+  <div class="sub">This instance requires a sign-in.</div>
+  <label for="user">Username</label>
+  <input id="user" type="text" autocomplete="username" autofocus />
   <label for="pw">Password</label>
-  <input id="pw" type="password" autocomplete="current-password" autofocus />
+  <input id="pw" type="password" autocomplete="current-password" />
   <button id="btn" type="submit">Sign in</button>
   <div class="err" id="err"></div>
 </form>
@@ -1850,6 +1865,7 @@ const next = params.get("next") || "/";
 const form = document.getElementById("f");
 form.onsubmit = async (e) => {
   e.preventDefault();
+  const username = document.getElementById("user").value;
   const pw = document.getElementById("pw").value;
   const btn = document.getElementById("btn");
   const err = document.getElementById("err");
@@ -1859,7 +1875,7 @@ form.onsubmit = async (e) => {
     const r = await fetch("/api/login", {
       method: "POST",
       headers: {"content-type": "application/json"},
-      body: JSON.stringify({password: pw}),
+      body: JSON.stringify({username: username, password: pw}),
     });
     if (r.ok) { location.href = next; return; }
     if (r.status === 204) { location.href = next; return; }
