@@ -21,6 +21,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
+from . import db
 from .session import (
     drain_events,
     get_session,
@@ -38,6 +39,11 @@ CONFIGS_DIR = REPO_ROOT / "configs"
 AUDIT_DIR = REPO_ROOT / "audit-logs"
 
 app = FastAPI(title="Dapper DeepAgents")
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    db.init()
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +228,10 @@ def list_deliverables(sid: str):
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
     p = Path(s.deliverables)
+    # Best-effort sync to Postgres so historical lookups see the same files
+    # the agent just wrote. No-op when the DB is disabled.
+    if db.enabled():
+        db.sync_from_disk(s.id, str(p))
     if not p.exists():
         return {"files": []}
     files = []
@@ -229,6 +239,163 @@ def list_deliverables(sid: str):
         if f.is_file():
             files.append({"path": str(f.relative_to(p)), "bytes": f.stat().st_size})
     return {"files": files}
+
+
+# ---------------------------------------------------------------------------
+# Historical scans
+#
+# Two sources, transparently merged:
+#   1. Postgres (preferred) — survives container restarts.
+#   2. The audit-logs/ directory — works for legacy scans pre-DB and for
+#      local dev when DATABASE_URL isn't set.
+#
+# The URL key is whichever identifier the frontend hands back: a DB scan id
+# (session UUID, 12 hex) or a disk folder name (host_deepagent-<epoch>).
+# ---------------------------------------------------------------------------
+
+def _scan_folder(name: str) -> Optional[Path]:
+    """Return the matching folder under AUDIT_DIR if one exists, else None."""
+    if "/" in name or ".." in name:
+        raise HTTPException(status_code=400, detail="invalid scan id")
+    p = (AUDIT_DIR / name).resolve()
+    if not str(p).startswith(str(AUDIT_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="path traversal")
+    return p if p.is_dir() else None
+
+
+def _resolve_scan_folder_for_db_id(scan_id: str) -> Optional[Path]:
+    """If the DB knows a scan_folder for this id, try resolving it on disk."""
+    if not db.enabled():
+        return None
+    for s in db.list_scans():
+        if s["id"] == scan_id and s.get("scan_folder"):
+            return _scan_folder(s["scan_folder"])
+    return None
+
+
+def _disk_scans() -> list[dict]:
+    """Walk AUDIT_DIR for scan folders with meta.json or deliverables/."""
+    if not AUDIT_DIR.exists():
+        return []
+    live_ids = {s["id"] for s in list_sessions()}
+    out: list[dict] = []
+    for d in AUDIT_DIR.iterdir():
+        if not d.is_dir():
+            continue
+        deliv = d / "deliverables"
+        meta_path = d / "meta.json"
+        has_deliv = deliv.exists() and any(deliv.iterdir())
+        if not (has_deliv or meta_path.exists()):
+            continue
+        meta: dict = {}
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text())
+            except Exception:
+                meta = {}
+        started_at = meta.get("started_at")
+        if started_at is None:
+            tail = d.name.rsplit("-", 1)[-1]
+            started_at = int(tail) if tail.isdigit() else d.stat().st_mtime
+        file_count = sum(1 for _ in deliv.glob("**/*") if _.is_file()) if deliv.exists() else 0
+        # Prefer the session id as the canonical scan_id when meta has it —
+        # that's what Postgres uses, so both sources align on the same key.
+        scan_id = meta.get("id") or d.name
+        out.append({
+            "scan_id": scan_id,
+            "scan_folder": d.name,
+            "url": meta.get("url"),
+            "repo": meta.get("repo"),
+            "started_at": started_at,
+            "file_count": file_count,
+            "live": meta.get("id") in live_ids,
+        })
+    return out
+
+
+@app.get("/api/scans")
+def list_scans_endpoint():
+    """Merged scan list from Postgres + disk. DB rows take precedence."""
+    live_ids = {s["id"] for s in list_sessions()}
+    by_id: dict[str, dict] = {}
+    # Postgres is the source of truth when present.
+    for s in db.list_scans():
+        by_id[s["id"]] = {
+            "scan_id": s["id"],
+            "scan_folder": s.get("scan_folder"),
+            "url": s.get("url"),
+            "repo": s.get("repo"),
+            "started_at": s.get("started_at"),
+            "file_count": s.get("file_count", 0),
+            "live": s["id"] in live_ids,
+            "status": s.get("status"),
+        }
+    # Backfill anything found on disk that the DB doesn't know about
+    # (legacy scans, or DB-disabled mode).
+    for s in _disk_scans():
+        by_id.setdefault(s["scan_id"], s)
+    out = sorted(by_id.values(), key=lambda r: r.get("started_at") or 0, reverse=True)
+    return {"scans": out}
+
+
+@app.get("/api/scans/{name}/deliverables")
+def list_scan_deliverables(name: str):
+    if db.enabled() and db.scan_exists(name):
+        return {"files": db.list_deliverables(name)}
+    folder = _resolve_scan_folder_for_db_id(name) or _scan_folder(name)
+    if not folder:
+        raise HTTPException(status_code=404, detail="scan not found")
+    deliv = folder / "deliverables"
+    if not deliv.exists():
+        return {"files": []}
+    files = []
+    for f in sorted(deliv.glob("**/*")):
+        if f.is_file():
+            files.append({"path": str(f.relative_to(deliv)), "bytes": f.stat().st_size})
+    return {"files": files}
+
+
+@app.get("/api/scans/{name}/deliverables/{path:path}")
+def read_scan_deliverable(name: str, path: str):
+    if db.enabled() and db.scan_exists(name):
+        content = db.get_deliverable(name, path)
+        if content is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return JSONResponse({"path": path, "content": content})
+    folder = _resolve_scan_folder_for_db_id(name) or _scan_folder(name)
+    if not folder:
+        raise HTTPException(status_code=404, detail="scan not found")
+    base = (folder / "deliverables").resolve()
+    target = (base / path).resolve()
+    if not str(target).startswith(str(base)):
+        raise HTTPException(status_code=400, detail="path traversal")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="not found")
+    return JSONResponse({"path": path, "content": target.read_text(errors="replace")})
+
+
+@app.get("/api/scans/{name}/deliverables.zip")
+def download_scan_zip(name: str):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if db.enabled() and db.scan_exists(name):
+            for f in db.list_deliverables(name):
+                content = db.get_deliverable(name, f["path"]) or ""
+                zf.writestr(f["path"], content)
+        else:
+            folder = _resolve_scan_folder_for_db_id(name) or _scan_folder(name)
+            if not folder:
+                raise HTTPException(status_code=404, detail="scan not found")
+            base = folder / "deliverables"
+            if base.exists():
+                for f in base.glob("**/*"):
+                    if f.is_file():
+                        zf.write(f, arcname=str(f.relative_to(base)))
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="dapper-{name}.zip"'},
+    )
 
 
 @app.get("/api/sessions/{sid}/deliverables.zip")
@@ -354,6 +521,16 @@ INDEX_HTML = r"""<!doctype html>
   .session-info .row .v { color:#d8dee9; word-break:break-all; text-align:right; }
   .session-info .actions { display:flex; gap:6px; margin-top:10px; }
   .session-info .actions button { flex:1; margin:0; padding:5px 8px; font-size:11px; background:#1f2937; border-color:#374151; }
+  .recent-scans { margin-top:18px; padding-top:14px; border-top:1px solid #1f2937; }
+  .recent-scans h3 { margin:0 0 8px 0; font-size:13px; color:#9aa5b1; display:flex; align-items:center; gap:6px; }
+  .recent-scans h3 .count { color:#6b7280; font-size:11px; font-weight:normal; }
+  .recent-scans .empty { color:#6b7280; font-size:11px; }
+  .recent-scans .scan-row { padding:8px 10px; margin-bottom:4px; border:1px solid #1f2937; border-radius:5px; cursor:pointer; font-size:11px; }
+  .recent-scans .scan-row:hover { background:#11151b; border-color:#374151; }
+  .recent-scans .scan-row .top { display:flex; justify-content:space-between; gap:6px; align-items:baseline; }
+  .recent-scans .scan-row .url { color:#d8dee9; word-break:break-all; flex:1; font-size:12px; }
+  .recent-scans .scan-row .badge { font-size:10px; color:#10b981; border:1px solid #10b981; padding:1px 5px; border-radius:8px; flex-shrink:0; }
+  .recent-scans .scan-row .meta { color:#6b7280; margin-top:3px; display:flex; justify-content:space-between; }
   details.setup-collapse { margin-top:10px; }
   details.setup-collapse > summary { cursor:pointer; font-size:11px; color:#9aa5b1; list-style:none; padding:4px 0; }
   details.setup-collapse > summary::-webkit-details-marker { display:none; }
@@ -425,6 +602,13 @@ INDEX_HTML = r"""<!doctype html>
 
       <button id="start">Start pentest</button>
       <div id="warn" style="color:#f87171;font-size:12px;margin-top:8px"></div>
+
+      <div class="recent-scans">
+        <h3>Recent scans <span class="count" id="recent-count"></span></h3>
+        <div id="recent-list">
+          <div class="empty">Loading…</div>
+        </div>
+      </div>
     </div>
     <div class="deliverables hidden" id="del-panel">
       <div class="head">
@@ -720,15 +904,23 @@ function makeFileRow(f) {
   return row;
 }
 
+// Source of deliverable files: either a live session or a historical scan.
+// Set to `/api/sessions/<sid>` while a session is active, or
+// `/api/scans/<folder>` when viewing a historical scan in read-only mode.
+let deliverablesBase = null;
+let viewingHistorical = false;
+
 async function refreshDeliverables() {
-  if (!session) return;
-  const data = await (await fetch(`/api/sessions/${session}/deliverables`)).json();
+  if (!deliverablesBase) return;
+  const data = await (await fetch(`${deliverablesBase}/deliverables`)).json();
   const list = $("del-list");
   list.innerHTML = "";
   if (!data.files.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.innerHTML = 'No reports yet. The agent will write findings here as it works — the <strong>executive summary</strong> appears when the run completes.';
+    empty.innerHTML = viewingHistorical
+      ? 'This scan completed with no deliverables on disk.'
+      : 'No reports yet. The agent will write findings here as it works — the <strong>executive summary</strong> appears when the run completes.';
     list.appendChild(empty);
     $("dl-zip").disabled = true;
     return;
@@ -745,6 +937,7 @@ async function refreshDeliverables() {
 
 let currentViewerPath = null;
 async function openViewer(path) {
+  if (!deliverablesBase) return;
   currentViewerPath = path;
   $("viewer-title").textContent = path;
   $("viewer-backdrop").classList.remove("hidden");
@@ -752,7 +945,7 @@ async function openViewer(path) {
   body.className = "vbody";
   body.textContent = "Loading…";
   try {
-    const data = await (await fetch(`/api/sessions/${session}/deliverables/${encodeURIComponent(path)}`)).json();
+    const data = await (await fetch(`${deliverablesBase}/deliverables/${encodeURIComponent(path)}`)).json();
     if (/\.md$/i.test(path)) {
       body.innerHTML = renderMd(data.content || "(empty)");
     } else {
@@ -770,19 +963,21 @@ function closeViewer() {
 $("viewer-close").onclick = closeViewer;
 $("viewer-backdrop").onclick = (e) => { if (e.target.id === "viewer-backdrop") closeViewer(); };
 $("viewer-download").onclick = () => {
-  if (!currentViewerPath || !session) return;
+  if (!currentViewerPath || !deliverablesBase) return;
   const a = document.createElement("a");
-  a.href = `/api/sessions/${session}/deliverables/${encodeURIComponent(currentViewerPath)}`;
+  a.href = `${deliverablesBase}/deliverables/${encodeURIComponent(currentViewerPath)}`;
   a.target = "_blank";
   a.click();
 };
 $("dl-zip").onclick = () => {
-  if (!session) return;
-  window.location.href = `/api/sessions/${session}/deliverables.zip`;
+  if (!deliverablesBase) return;
+  window.location.href = `${deliverablesBase}/deliverables.zip`;
 };
-$("new-session-btn").onclick = () => {
-  if (!confirm("Start a new pentest? The current chat will be cleared (the session keeps running in the background).")) return;
+
+function resetToSetup() {
   session = null;
+  deliverablesBase = null;
+  viewingHistorical = false;
   $("session-info").classList.add("hidden");
   $("setup").classList.remove("hidden");
   $("del-panel").classList.add("hidden");
@@ -791,7 +986,93 @@ $("new-session-btn").onclick = () => {
   $("composer-input").disabled = true;
   $("send").disabled = true;
   $("start").disabled = false;
+  loadRecentScans();
+}
+
+$("new-session-btn").onclick = () => {
+  if (!confirm("Return to the home screen? Any running scan keeps running in the background and will show up under Recent scans.")) return;
+  resetToSetup();
 };
+
+// ---- Historical scans ----
+function fmtRelTime(epochSec) {
+  if (!epochSec) return "";
+  const d = new Date(epochSec * 1000);
+  const diff = (Date.now() / 1000) - epochSec;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+  if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+  if (diff < 86400 * 30) return Math.floor(diff / 86400) + "d ago";
+  return d.toLocaleDateString();
+}
+
+async function loadRecentScans() {
+  const list = $("recent-list");
+  list.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const data = await (await fetch("/api/scans")).json();
+    const scans = data.scans || [];
+    $("recent-count").textContent = scans.length ? `(${scans.length})` : "";
+    list.innerHTML = "";
+    if (!scans.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "No past scans yet. They'll appear here after your first run.";
+      list.appendChild(empty);
+      return;
+    }
+    for (const s of scans) {
+      const row = document.createElement("div");
+      row.className = "scan-row";
+      row.onclick = () => openHistoricalScan(s);
+      const top = document.createElement("div");
+      top.className = "top";
+      const url = document.createElement("span");
+      url.className = "url";
+      url.textContent = s.url || s.scan_id;
+      top.appendChild(url);
+      if (s.live) {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = "live";
+        top.appendChild(badge);
+      }
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      const left = document.createElement("span");
+      left.textContent = fmtRelTime(s.started_at) + (s.repo ? ` · ${s.repo}` : "");
+      const right = document.createElement("span");
+      right.textContent = `${s.file_count} file${s.file_count === 1 ? "" : "s"}`;
+      meta.appendChild(left);
+      meta.appendChild(right);
+      row.appendChild(top);
+      row.appendChild(meta);
+      list.appendChild(row);
+    }
+  } catch (e) {
+    list.innerHTML = '<div class="empty">Failed to load recent scans.</div>';
+  }
+}
+
+function openHistoricalScan(scan) {
+  // Read-only view: no SSE stream, no composer, just the deliverables panel.
+  session = null;
+  deliverablesBase = `/api/scans/${encodeURIComponent(scan.scan_id)}`;
+  viewingHistorical = true;
+  $("setup").classList.add("hidden");
+  $("session-info").classList.remove("hidden");
+  $("del-panel").classList.remove("hidden");
+  $("si-url").textContent = scan.url || scan.scan_id;
+  $("si-repo").textContent = scan.repo || "(none — pure DAST)";
+  $("si-status").textContent = scan.live ? "live (read-only view)" : "finished";
+  $("setup-readonly").textContent = `scan id: ${scan.scan_id}\nstarted: ${new Date((scan.started_at || 0) * 1000).toLocaleString()}`;
+  $("hdr-status").textContent = `viewing ${scan.scan_id}`;
+  $("feed").innerHTML = '<div class="msg status">Read-only view of a past scan. Open the reports on the left, or click "New pentest" to return to the home screen.</div>';
+  $("composer-input").disabled = true;
+  $("send").disabled = true;
+  $("composer-input").placeholder = "Chat is disabled for historical scans.";
+  refreshDeliverables();
+}
 
 $("start").onclick = async () => {
   const url = $("url").value.trim();
@@ -824,6 +1105,8 @@ $("start").onclick = async () => {
   }
   const data = await res.json();
   session = data.id;
+  deliverablesBase = `/api/sessions/${session}`;
+  viewingHistorical = false;
   $("hdr-status").textContent = `session ${session.slice(0, 12)}`;
   // Swap sidebar into session mode.
   $("setup").classList.add("hidden");
@@ -875,6 +1158,12 @@ $("composer-input").addEventListener("keydown", (e) => {
 
 renderClasses();
 loadOptions();
+loadRecentScans();
+// Refresh the recent-scans list every 30s while the setup screen is visible,
+// so a scan running in another tab/process eventually shows up.
+setInterval(() => {
+  if (!session && !viewingHistorical) loadRecentScans();
+}, 30000);
 </script>
 </body>
 </html>

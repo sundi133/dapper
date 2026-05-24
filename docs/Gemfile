@@ -1,0 +1,11 @@
+source "https://rubygems.org"
+
+# Match what GitHub Pages uses so `bundle exec jekyll serve` mirrors the live
+# build. See https://pages.github.com/versions/ for the supported set.
+gem "github-pages", group: :jekyll_plugins
+gem "jekyll-remote-theme"
+gem "jekyll-seo-tag"
+
+# Windows / JRuby support
+gem "tzinfo-data", platforms: [:mingw, :x64_mingw, :mswin, :jruby]
+gem "wdm", "~> 0.1.1", platforms: [:mingw, :x64_mingw, :mswin]
