@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -86,6 +86,7 @@ class StartRequest(BaseModel):
     url: str
     repo: Optional[str] = None
     repo_git_url: Optional[str] = None
+    repo_git_token: Optional[str] = None  # one-shot; never stored or logged
     config: Optional[str] = None
     config_yaml: Optional[str] = None  # paste-your-own YAML
     classes: Optional[list[str]] = None
@@ -109,12 +110,37 @@ def create_session(req: StartRequest):
         REPOS_DIR.mkdir(parents=True, exist_ok=True)
         target = REPOS_DIR / repo_name
         if not target.exists():
-            proc = subprocess.run(
-                ["git", "clone", "--depth", "1", req.repo_git_url, str(target)],
-                capture_output=True, text=True, timeout=300,
-            )
+            # Build a one-shot Authorization header rather than embedding the
+            # token in the URL — keeps the token out of .git/config, out of
+            # `ps aux` URL substrings, and out of any error path that echoes
+            # the clone URL back. The header is set via `-c` so it lives for
+            # this git invocation only.
+            cmd = ["git"]
+            if req.repo_git_token:
+                import base64 as _b64
+                hdr = _b64.b64encode(f"x-access-token:{req.repo_git_token}".encode()).decode()
+                cmd += ["-c", f"http.extraheader=Authorization: Basic {hdr}"]
+            cmd += ["clone", "--depth", "1", req.repo_git_url, str(target)]
+            env = {
+                **os.environ,
+                # Block interactive credential prompts so a bad token fails
+                # fast instead of hanging the request.
+                "GIT_TERMINAL_PROMPT": "0",
+                "GIT_ASKPASS": "/bin/true",
+                "GCM_INTERACTIVE": "never",
+            }
+            proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=300)
             if proc.returncode != 0:
-                raise HTTPException(status_code=400, detail=f"git clone failed: {proc.stderr[-500:]}")
+                # Strip the header (and any token-looking string) from stderr
+                # before bubbling it back to the client.
+                stderr = proc.stderr
+                if req.repo_git_token:
+                    stderr = stderr.replace(req.repo_git_token, "***")
+                stderr = stderr.replace(hdr, "***") if req.repo_git_token else stderr
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"git clone failed: {stderr[-500:]}",
+                )
     elif repo_name:
         if not (REPOS_DIR / repo_name).is_dir():
             raise HTTPException(status_code=400, detail=f"./repos/{repo_name} does not exist")
@@ -434,6 +460,75 @@ def read_deliverable(sid: str, path: str):
 
 
 # ---------------------------------------------------------------------------
+# API keys (CI/CD callers) — list / mint / revoke. The plaintext token is
+# returned exactly once on mint; thereafter only the prefix is visible.
+# ---------------------------------------------------------------------------
+
+class CreateKeyRequest(BaseModel):
+    label: Optional[str] = None
+
+
+@app.get("/api/keys")
+def list_keys():
+    if not db.enabled():
+        raise HTTPException(status_code=503, detail="DATABASE_URL not configured")
+    return {"keys": db.list_api_keys()}
+
+
+@app.post("/api/keys")
+def create_key(req: CreateKeyRequest):
+    if not db.enabled():
+        raise HTTPException(status_code=503, detail="DATABASE_URL not configured")
+    label = (req.label or "").strip() or None
+    out = db.create_api_key(label)
+    if not out:
+        raise HTTPException(status_code=500, detail="failed to create key")
+    return out
+
+
+@app.delete("/api/keys/{key_id}")
+def delete_key(key_id: str):
+    if not db.enabled():
+        raise HTTPException(status_code=503, detail="DATABASE_URL not configured")
+    if not db.revoke_api_key(key_id):
+        raise HTTPException(status_code=404, detail="key not found or already revoked")
+    return {"ok": True}
+
+
+def _require_bearer(authorization: Optional[str]) -> str:
+    """Validate a Bearer token from the Authorization header. Returns the
+    key id on success; raises 401 otherwise. Used by /api/scans (the CI-
+    facing trigger endpoint)."""
+    if not db.enabled():
+        raise HTTPException(status_code=503, detail="API keys require DATABASE_URL")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="missing Authorization: Bearer <token> header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization.split(" ", 1)[1].strip()
+    key_id = db.verify_api_key(token)
+    if not key_id:
+        raise HTTPException(
+            status_code=401,
+            detail="invalid or revoked API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return key_id
+
+
+@app.post("/api/scans")
+def create_scan_ci(req: StartRequest, authorization: Optional[str] = Header(None)):
+    """CI/CD-facing alias of POST /api/sessions. Requires a valid Bearer
+    token from a key minted in the CI/CD tab. The browser UI keeps using
+    /api/sessions unauthenticated; this endpoint exists so we can require
+    auth on the CI path without breaking local use."""
+    _require_bearer(authorization)
+    return create_session(req)
+
+
+# ---------------------------------------------------------------------------
 # Single-page UI
 # ---------------------------------------------------------------------------
 
@@ -446,10 +541,78 @@ INDEX_HTML = r"""<!doctype html>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b0d10; color:#d8dee9; margin:0; }
-  header { padding:14px 22px; border-bottom:1px solid #1f2937; display:flex; gap:16px; align-items:baseline; }
+  header { padding:14px 22px; border-bottom:1px solid #1f2937; display:flex; gap:20px; align-items:center; }
   header h1 { margin:0; font-size:18px; }
-  header .status { color:#9aa5b1; font-size:12px; }
+  header .status { color:#9aa5b1; font-size:12px; margin-left:auto; }
+  header nav { display:flex; gap:4px; }
+  header nav a {
+    color:#9aa5b1; text-decoration:none; font-size:12px; padding:6px 12px;
+    border-radius:4px; border:1px solid transparent; cursor:pointer;
+  }
+  header nav a:hover { color:#d8dee9; background:#11151b; }
+  header nav a.active { color:#d8dee9; background:#11151b; border-color:#233040; }
   main { display:grid; grid-template-columns: 380px 1fr; height:calc(100vh - 51px); }
+  .page { padding:22px 28px; overflow:auto; height:calc(100vh - 51px); }
+  .page h2 { margin:0 0 4px 0; font-size:16px; }
+  .page .sub { color:#6b7280; font-size:12px; margin-bottom:18px; }
+  .page section { margin-bottom:28px; }
+  .runs-toolbar { display:flex; gap:10px; margin-bottom:12px; align-items:center; flex-wrap:wrap; }
+  .runs-toolbar input, .runs-toolbar select {
+    width:auto; margin:0; font-size:12px; padding:6px 10px;
+  }
+  .runs-toolbar .stretch { flex:1; min-width:200px; }
+  table.runs { width:100%; border-collapse:collapse; font-size:12px; }
+  table.runs th, table.runs td {
+    text-align:left; padding:8px 10px; border-bottom:1px solid #1f2937;
+    vertical-align:top;
+  }
+  table.runs th {
+    color:#9aa5b1; font-weight:normal; font-size:11px; text-transform:uppercase;
+    letter-spacing:0.05em; cursor:pointer; user-select:none; white-space:nowrap;
+  }
+  table.runs th.sorted-asc::after  { content:" ↑"; color:#6b7280; }
+  table.runs th.sorted-desc::after { content:" ↓"; color:#6b7280; }
+  table.runs tbody tr { cursor:pointer; }
+  table.runs tbody tr:hover { background:#11151b; }
+  table.runs td.url { word-break:break-all; max-width:0; }
+  table.runs .pill {
+    display:inline-block; padding:1px 7px; border-radius:8px;
+    font-size:10px; border:1px solid;
+  }
+  .pill.running   { color:#60a5fa; border-color:#60a5fa; }
+  .pill.completed { color:#10b981; border-color:#10b981; }
+  .pill.error     { color:#f87171; border-color:#f87171; }
+  .pill.unknown   { color:#9aa5b1; border-color:#374151; }
+  .keys-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+  .keys-table th, .keys-table td { padding:8px 10px; border-bottom:1px solid #1f2937; text-align:left; }
+  .keys-table th { color:#9aa5b1; font-weight:normal; font-size:11px; }
+  .keys-table code { font-family: inherit; color:#d8dee9; }
+  .keys-table tr.revoked td { color:#6b7280; }
+  .key-reveal {
+    background:#0e1217; border:1px solid #f59e0b; border-radius:6px;
+    padding:12px 14px; margin-top:10px;
+  }
+  .key-reveal .warn { color:#f59e0b; font-size:11px; margin-bottom:6px; }
+  .key-reveal code {
+    display:block; padding:8px 10px; background:#000; border-radius:4px;
+    word-break:break-all; user-select:all; font-size:12px;
+  }
+  .snippet {
+    background:#0e1217; border:1px solid #233040; border-radius:6px;
+    padding:12px 14px; position:relative; margin-bottom:14px;
+  }
+  .snippet .lbl { font-size:11px; color:#9aa5b1; margin-bottom:6px; }
+  .snippet pre {
+    margin:0; font-size:11px; color:#d8dee9; white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .snippet .copy {
+    position:absolute; top:8px; right:8px; width:auto;
+    font-size:10px; padding:3px 8px; margin:0;
+  }
+  .inline-form { display:flex; gap:8px; align-items:flex-end; max-width:520px; }
+  .inline-form input { margin:0; }
+  .inline-form button { width:auto; margin:0; padding:8px 14px; }
   aside { border-right:1px solid #1f2937; padding:18px; overflow:auto; }
   section.chat { display:flex; flex-direction:column; min-width:0; }
   label { display:block; margin-top:12px; font-size:12px; color:#9aa5b1; }
@@ -560,9 +723,14 @@ INDEX_HTML = r"""<!doctype html>
 <body>
 <header>
   <h1>Dapper × DeepAgents</h1>
+  <nav>
+    <a id="nav-start" data-tab="start" class="active">Start</a>
+    <a id="nav-runs"  data-tab="runs">Runs</a>
+    <a id="nav-cicd"  data-tab="cicd">CI/CD</a>
+  </nav>
   <span class="status" id="hdr-status">disconnected</span>
 </header>
-<main>
+<main id="page-start">
   <aside>
     <div id="session-info" class="session-info hidden">
       <div class="row"><span class="k">Target</span><span class="v" id="si-url"></span></div>
@@ -583,6 +751,14 @@ INDEX_HTML = r"""<!doctype html>
       <select id="repo"><option value="">(none — pure DAST)</option></select>
       <label>Or clone a repo by git URL</label>
       <input id="repo-git" placeholder="https://github.com/owner/repo.git" />
+      <label>GitHub token (only needed for private repos)</label>
+      <input id="repo-git-token" type="password" autocomplete="off" spellcheck="false"
+             placeholder="ghp_… or github_pat_… (used once for this clone, not stored)" />
+      <div style="font-size:11px;color:#6b7280;margin-top:-6px;margin-bottom:10px;">
+        Personal access token with <code>repo</code> scope, or a GitHub App
+        installation token. Sent once over TLS, used only for this <code>git
+        clone</code>, never logged or written to disk.
+      </div>
 
       <label>Config source</label>
       <select id="config-mode">
@@ -602,13 +778,6 @@ INDEX_HTML = r"""<!doctype html>
 
       <button id="start">Start pentest</button>
       <div id="warn" style="color:#f87171;font-size:12px;margin-top:8px"></div>
-
-      <div class="recent-scans">
-        <h3>Recent scans <span class="count" id="recent-count"></span></h3>
-        <div id="recent-list">
-          <div class="empty">Loading…</div>
-        </div>
-      </div>
     </div>
     <div class="deliverables hidden" id="del-panel">
       <div class="head">
@@ -647,6 +816,100 @@ INDEX_HTML = r"""<!doctype html>
     </div>
   </section>
 </main>
+
+<div id="page-runs" class="page hidden">
+  <h2>Runs</h2>
+  <div class="sub">All pentests this instance has executed. Click any row to open its reports.</div>
+  <div class="runs-toolbar">
+    <input id="runs-filter" class="stretch" placeholder="Filter by URL or repo…" />
+    <select id="runs-status-filter">
+      <option value="">All statuses</option>
+      <option value="running">Running</option>
+      <option value="completed">Completed</option>
+      <option value="error">Error</option>
+    </select>
+    <button id="runs-refresh" style="width:auto;margin:0;padding:6px 14px;">Refresh</button>
+  </div>
+  <table class="runs" id="runs-table">
+    <thead>
+      <tr>
+        <th data-sort="started_at" class="sorted-desc">Started</th>
+        <th data-sort="url">Target</th>
+        <th data-sort="repo">Repo</th>
+        <th data-sort="status">Status</th>
+        <th data-sort="duration">Duration</th>
+        <th data-sort="file_count">Files</th>
+      </tr>
+    </thead>
+    <tbody id="runs-tbody">
+      <tr><td colspan="6" style="color:#6b7280;">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div id="page-cicd" class="page hidden">
+  <h2>CI/CD</h2>
+  <div class="sub">
+    Trigger Dapper from your pipeline. Mint an API key below, store it as a
+    secret in your CI provider, then <code>POST</code> to
+    <code>/api/scans</code> with a <code>Bearer</code> token.
+  </div>
+
+  <section>
+    <h3 style="font-size:13px;color:#9aa5b1;margin:0 0 8px 0;">API keys</h3>
+    <div class="inline-form">
+      <div style="flex:1;">
+        <label style="margin-top:0;">Label (e.g. "github-actions-staging")</label>
+        <input id="newkey-label" placeholder="Descriptive label so you remember what uses it" />
+      </div>
+      <button id="newkey-btn">Mint key</button>
+    </div>
+    <div id="newkey-warn" style="color:#f87171;font-size:12px;margin-top:8px;"></div>
+    <div id="newkey-reveal" class="key-reveal hidden">
+      <div class="warn">Copy this key now. It will never be shown again.</div>
+      <code id="newkey-plaintext"></code>
+    </div>
+    <table class="keys-table">
+      <thead>
+        <tr>
+          <th>Prefix</th>
+          <th>Label</th>
+          <th>Created</th>
+          <th>Last used</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="keys-tbody">
+        <tr><td colspan="6" style="color:#6b7280;">Loading…</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3 style="font-size:13px;color:#9aa5b1;margin:0 0 8px 0;">Trigger a scan</h3>
+    <div class="snippet">
+      <button class="copy" data-copy="snippet-curl">Copy</button>
+      <div class="lbl">cURL</div>
+      <pre id="snippet-curl"></pre>
+    </div>
+    <div class="snippet">
+      <button class="copy" data-copy="snippet-gha">Copy</button>
+      <div class="lbl">GitHub Actions (<code>.github/workflows/dapper.yml</code>)</div>
+      <pre id="snippet-gha"></pre>
+    </div>
+    <div class="snippet">
+      <button class="copy" data-copy="snippet-gitlab">Copy</button>
+      <div class="lbl">GitLab CI (<code>.gitlab-ci.yml</code>)</div>
+      <pre id="snippet-gitlab"></pre>
+    </div>
+    <div class="snippet">
+      <button class="copy" data-copy="snippet-circle">Copy</button>
+      <div class="lbl">CircleCI (<code>.circleci/config.yml</code>)</div>
+      <pre id="snippet-circle"></pre>
+    </div>
+  </section>
+</div>
 
 <script>
 const CLASSES = ["injection","xss","auth","authz","ssrf","client-side","session-mgmt","api-testing","business-logic","crypto","config-deploy","error-handling","info-gathering","web-attacks"];
@@ -986,11 +1249,11 @@ function resetToSetup() {
   $("composer-input").disabled = true;
   $("send").disabled = true;
   $("start").disabled = false;
-  loadRecentScans();
+  if (!$("page-runs").classList.contains("hidden")) loadRuns();
 }
 
 $("new-session-btn").onclick = () => {
-  if (!confirm("Return to the home screen? Any running scan keeps running in the background and will show up under Recent scans.")) return;
+  if (!confirm("Return to the home screen? Any running scan keeps running in the background — you can find it on the Runs tab.")) return;
   resetToSetup();
 };
 
@@ -1006,53 +1269,266 @@ function fmtRelTime(epochSec) {
   return d.toLocaleDateString();
 }
 
-async function loadRecentScans() {
-  const list = $("recent-list");
-  list.innerHTML = '<div class="empty">Loading…</div>';
-  try {
-    const data = await (await fetch("/api/scans")).json();
-    const scans = data.scans || [];
-    $("recent-count").textContent = scans.length ? `(${scans.length})` : "";
-    list.innerHTML = "";
-    if (!scans.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty";
-      empty.textContent = "No past scans yet. They'll appear here after your first run.";
-      list.appendChild(empty);
-      return;
+// ---- Runs tab ----
+let runsCache = [];
+let runsSort = { key: "started_at", dir: "desc" };
+
+function fmtDuration(startedSec, finishedSec) {
+  if (!startedSec) return "—";
+  const end = finishedSec || (Date.now() / 1000);
+  const s = Math.max(0, Math.floor(end - startedSec));
+  if (s < 60) return s + "s";
+  if (s < 3600) return Math.floor(s / 60) + "m " + (s % 60) + "s";
+  return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
+}
+
+function effectiveStatus(s) {
+  if (s.live) return "running";
+  return s.status || "unknown";
+}
+
+function renderRuns() {
+  const tbody = $("runs-tbody");
+  const q = $("runs-filter").value.trim().toLowerCase();
+  const statusF = $("runs-status-filter").value;
+  let rows = runsCache.filter(s => {
+    const status = effectiveStatus(s);
+    if (statusF && status !== statusF) return false;
+    if (!q) return true;
+    return (s.url || "").toLowerCase().includes(q)
+        || (s.repo || "").toLowerCase().includes(q)
+        || (s.scan_id || "").toLowerCase().includes(q);
+  });
+  const k = runsSort.key, dir = runsSort.dir === "asc" ? 1 : -1;
+  rows.sort((a, b) => {
+    let av = a[k], bv = b[k];
+    if (k === "duration") { av = (a.finished_at || Date.now()/1000) - (a.started_at || 0);
+                             bv = (b.finished_at || Date.now()/1000) - (b.started_at || 0); }
+    if (k === "status")   { av = effectiveStatus(a); bv = effectiveStatus(b); }
+    if (av == null) av = "";
+    if (bv == null) bv = "";
+    if (typeof av === "string") return av.localeCompare(bv) * dir;
+    return (av - bv) * dir;
+  });
+  document.querySelectorAll("#runs-table th[data-sort]").forEach(th => {
+    th.classList.remove("sorted-asc", "sorted-desc");
+    if (th.dataset.sort === runsSort.key) {
+      th.classList.add(runsSort.dir === "asc" ? "sorted-asc" : "sorted-desc");
     }
-    for (const s of scans) {
-      const row = document.createElement("div");
-      row.className = "scan-row";
-      row.onclick = () => openHistoricalScan(s);
-      const top = document.createElement("div");
-      top.className = "top";
-      const url = document.createElement("span");
-      url.className = "url";
-      url.textContent = s.url || s.scan_id;
-      top.appendChild(url);
-      if (s.live) {
-        const badge = document.createElement("span");
-        badge.className = "badge";
-        badge.textContent = "live";
-        top.appendChild(badge);
-      }
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      const left = document.createElement("span");
-      left.textContent = fmtRelTime(s.started_at) + (s.repo ? ` · ${s.repo}` : "");
-      const right = document.createElement("span");
-      right.textContent = `${s.file_count} file${s.file_count === 1 ? "" : "s"}`;
-      meta.appendChild(left);
-      meta.appendChild(right);
-      row.appendChild(top);
-      row.appendChild(meta);
-      list.appendChild(row);
-    }
-  } catch (e) {
-    list.innerHTML = '<div class="empty">Failed to load recent scans.</div>';
+  });
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;">No runs match the current filter.</td></tr>';
+    return;
+  }
+  for (const s of rows) {
+    const tr = document.createElement("tr");
+    tr.onclick = () => { switchTab("start"); openHistoricalScan(s); };
+    const status = effectiveStatus(s);
+    tr.innerHTML = `
+      <td title="${new Date((s.started_at || 0) * 1000).toLocaleString()}">${fmtRelTime(s.started_at)}</td>
+      <td class="url">${escapeHtml(s.url || s.scan_id)}</td>
+      <td>${escapeHtml(s.repo || "")}</td>
+      <td><span class="pill ${status}">${status}</span></td>
+      <td>${fmtDuration(s.started_at, s.finished_at)}</td>
+      <td>${s.file_count || 0}</td>
+    `;
+    tbody.appendChild(tr);
   }
 }
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+async function loadRuns() {
+  try {
+    const data = await (await fetch("/api/scans")).json();
+    runsCache = data.scans || [];
+    renderRuns();
+  } catch (e) {
+    $("runs-tbody").innerHTML = '<tr><td colspan="6" style="color:#f87171;">Failed to load runs.</td></tr>';
+  }
+}
+
+document.querySelectorAll("#runs-table th[data-sort]").forEach(th => {
+  th.onclick = () => {
+    const k = th.dataset.sort;
+    if (runsSort.key === k) runsSort.dir = runsSort.dir === "asc" ? "desc" : "asc";
+    else { runsSort.key = k; runsSort.dir = "desc"; }
+    renderRuns();
+  };
+});
+$("runs-filter").oninput = renderRuns;
+$("runs-status-filter").onchange = renderRuns;
+$("runs-refresh").onclick = loadRuns;
+
+// ---- Tab routing ----
+function switchTab(name) {
+  const valid = ["start", "runs", "cicd"];
+  if (!valid.includes(name)) name = "start";
+  document.querySelectorAll("header nav a").forEach(a => {
+    a.classList.toggle("active", a.dataset.tab === name);
+  });
+  $("page-start").classList.toggle("hidden", name !== "start");
+  $("page-runs").classList.toggle("hidden",  name !== "runs");
+  $("page-cicd").classList.toggle("hidden",  name !== "cicd");
+  if (name !== "start") {
+    // Hide the start-page header status while we're on another tab.
+  }
+  if (location.hash.slice(1) !== name) {
+    history.replaceState(null, "", "#" + name);
+  }
+  if (name === "runs") loadRuns();
+  if (name === "cicd") { loadKeys(); renderSnippets(); }
+}
+document.querySelectorAll("header nav a").forEach(a => {
+  a.onclick = (e) => { e.preventDefault(); switchTab(a.dataset.tab); };
+});
+window.addEventListener("hashchange", () => switchTab(location.hash.slice(1)));
+
+// ---- CI/CD tab ----
+async function loadKeys() {
+  const tbody = $("keys-tbody");
+  try {
+    const res = await fetch("/api/keys");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({detail: "request failed"}));
+      tbody.innerHTML = `<tr><td colspan="6" style="color:#f87171;">${escapeHtml(err.detail || "failed")}</td></tr>`;
+      return;
+    }
+    const data = await res.json();
+    const keys = data.keys || [];
+    if (!keys.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;">No keys yet. Mint one above to trigger scans from CI.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = "";
+    for (const k of keys) {
+      const revoked = !!k.revoked_at;
+      const tr = document.createElement("tr");
+      if (revoked) tr.className = "revoked";
+      tr.innerHTML = `
+        <td><code>${escapeHtml(k.prefix)}…</code></td>
+        <td>${escapeHtml(k.label || "")}</td>
+        <td title="${new Date((k.created_at || 0) * 1000).toLocaleString()}">${fmtRelTime(k.created_at)}</td>
+        <td>${k.last_used_at ? fmtRelTime(k.last_used_at) : "never"}</td>
+        <td>${revoked ? "revoked" : "active"}</td>
+        <td></td>
+      `;
+      if (!revoked) {
+        const btn = document.createElement("button");
+        btn.textContent = "Revoke";
+        btn.style.width = "auto"; btn.style.margin = "0"; btn.style.padding = "4px 10px";
+        btn.style.fontSize = "11px";
+        btn.onclick = async () => {
+          if (!confirm(`Revoke key ${k.prefix}…? CI jobs using it will start failing immediately.`)) return;
+          const r = await fetch(`/api/keys/${encodeURIComponent(k.id)}`, {method: "DELETE"});
+          if (r.ok) loadKeys();
+        };
+        tr.querySelector("td:last-child").appendChild(btn);
+      }
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#f87171;">Failed to load keys.</td></tr>';
+  }
+}
+
+$("newkey-btn").onclick = async () => {
+  const label = $("newkey-label").value.trim();
+  $("newkey-warn").textContent = "";
+  const r = await fetch("/api/keys", {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify({label}),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({detail: "request failed"}));
+    $("newkey-warn").textContent = err.detail || "Failed to mint key";
+    return;
+  }
+  const out = await r.json();
+  $("newkey-plaintext").textContent = out.plaintext;
+  $("newkey-reveal").classList.remove("hidden");
+  $("newkey-label").value = "";
+  loadKeys();
+};
+
+function renderSnippets() {
+  const origin = location.origin;
+  const curl =
+`curl -X POST "${origin}/api/scans" \\
+  -H "Authorization: Bearer $DAPPER_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "url": "https://staging.example.com",
+    "repo_git_url": "https://github.com/your-org/your-repo.git",
+    "skip_exploit": true
+  }'`;
+  const gha =
+`name: dapper-pentest
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  pentest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dapper scan
+        env:
+          DAPPER_API_KEY: \${{ secrets.DAPPER_API_KEY }}
+        run: |
+          curl -fsS -X POST "${origin}/api/scans" \\
+            -H "Authorization: Bearer $DAPPER_API_KEY" \\
+            -H "Content-Type: application/json" \\
+            -d "{\\"url\\":\\"https://staging.example.com\\",\\"repo_git_url\\":\\"https://github.com/\${{ github.repository }}.git\\",\\"skip_exploit\\":true}"`;
+  const gitlab =
+`dapper-pentest:
+  stage: test
+  image: curlimages/curl:latest
+  script:
+    - |
+      curl -fsS -X POST "${origin}/api/scans" \\
+        -H "Authorization: Bearer $DAPPER_API_KEY" \\
+        -H "Content-Type: application/json" \\
+        -d "{\\"url\\":\\"https://staging.example.com\\",\\"repo_git_url\\":\\"$CI_REPOSITORY_URL\\",\\"skip_exploit\\":true}"
+  only: [merge_requests]`;
+  const circle =
+`version: 2.1
+jobs:
+  dapper-pentest:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Trigger Dapper scan
+          command: |
+            curl -fsS -X POST "${origin}/api/scans" \\
+              -H "Authorization: Bearer $DAPPER_API_KEY" \\
+              -H "Content-Type: application/json" \\
+              -d "{\\"url\\":\\"https://staging.example.com\\",\\"repo_git_url\\":\\"$CIRCLE_REPOSITORY_URL\\",\\"skip_exploit\\":true}"
+workflows:
+  pentest:
+    jobs: [dapper-pentest]`;
+  $("snippet-curl").textContent = curl;
+  $("snippet-gha").textContent = gha;
+  $("snippet-gitlab").textContent = gitlab;
+  $("snippet-circle").textContent = circle;
+}
+document.querySelectorAll(".snippet .copy").forEach(btn => {
+  btn.onclick = async () => {
+    const id = btn.dataset.copy;
+    try {
+      await navigator.clipboard.writeText($(id).textContent);
+      const old = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = old; }, 1200);
+    } catch (e) {}
+  };
+});
 
 function openHistoricalScan(scan) {
   // Read-only view: no SSE stream, no composer, just the deliverables panel.
@@ -1082,12 +1558,16 @@ $("start").onclick = async () => {
     url,
     repo: $("repo").value || null,
     repo_git_url: $("repo-git").value.trim() || null,
+    repo_git_token: $("repo-git-token").value || null,
     config: mode === "builtin" ? ($("config").value || null) : null,
     config_yaml: mode === "custom" ? ($("config-yaml").value.trim() || null) : null,
     classes: selectedClasses(),
     skip_exploit: $("skip-exploit").checked,
     initial_message: $("initial-msg").value.trim() || null,
   };
+  // Wipe the token field immediately so it doesn't sit in DOM memory after
+  // the request. The backend uses it once and discards it.
+  $("repo-git-token").value = "";
   $("warn").textContent = "";
   $("start").disabled = true;
   $("feed").innerHTML = "";
@@ -1158,11 +1638,11 @@ $("composer-input").addEventListener("keydown", (e) => {
 
 renderClasses();
 loadOptions();
-loadRecentScans();
-// Refresh the recent-scans list every 30s while the setup screen is visible,
-// so a scan running in another tab/process eventually shows up.
+switchTab(location.hash.slice(1) || "start");
+// Refresh the runs table every 30s while it's the active tab, so scans
+// running in another browser tab or another worker eventually show up.
 setInterval(() => {
-  if (!session && !viewingHistorical) loadRecentScans();
+  if (!session && !viewingHistorical && !$("page-runs").classList.contains("hidden")) loadRuns();
 }, 30000);
 </script>
 </body>
