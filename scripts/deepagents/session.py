@@ -444,6 +444,22 @@ def start_session(
         skip_exploit=skip_exploit,
         initial_message=initial_message,
     )
+    # Persist scan metadata next to deliverables/ so the run survives a server
+    # restart and shows up in the historical scans list.
+    try:
+        meta_path = Path(deliverables).parent / "meta.json"
+        meta_path.write_text(json.dumps({
+            "id": session.id,
+            "url": url,
+            "repo": repo,
+            "model": model,
+            "classes": session.classes,
+            "skip_exploit": skip_exploit,
+            "started_at": session.started_at,
+            "config_path": config_path,
+        }, indent=2))
+    except Exception:
+        pass
     register_session(session)
     session.emit("status", status="pending")
     t = threading.Thread(target=_run_agent, args=(session,), daemon=True)

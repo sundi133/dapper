@@ -231,6 +231,115 @@ def list_deliverables(sid: str):
     return {"files": files}
 
 
+# ---------------------------------------------------------------------------
+# Historical scans (persisted on disk under AUDIT_DIR)
+# ---------------------------------------------------------------------------
+
+def _scan_folder(name: str) -> Path:
+    """Resolve a scan folder name (e.g. 'host_deepagent-1234567890') under
+    AUDIT_DIR, with a path-traversal guard."""
+    if "/" in name or ".." in name:
+        raise HTTPException(status_code=400, detail="invalid scan id")
+    p = (AUDIT_DIR / name).resolve()
+    if not str(p).startswith(str(AUDIT_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="path traversal")
+    if not p.is_dir():
+        raise HTTPException(status_code=404, detail="scan not found")
+    return p
+
+
+def _historical_scans() -> list[dict]:
+    """Walk AUDIT_DIR and return every scan folder that has either a
+    meta.json or a non-empty deliverables/ directory."""
+    if not AUDIT_DIR.exists():
+        return []
+    live_ids = {s["id"] for s in list_sessions()}
+    out: list[dict] = []
+    for d in AUDIT_DIR.iterdir():
+        if not d.is_dir():
+            continue
+        deliv = d / "deliverables"
+        meta_path = d / "meta.json"
+        has_deliv = deliv.exists() and any(deliv.iterdir())
+        if not (has_deliv or meta_path.exists()):
+            continue
+        meta: dict = {}
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text())
+            except Exception:
+                meta = {}
+        # Derive timestamp from folder name suffix (deepagent-<epoch>) when
+        # meta is missing, so legacy scans still show.
+        started_at = meta.get("started_at")
+        if started_at is None:
+            tail = d.name.rsplit("-", 1)[-1]
+            if tail.isdigit():
+                started_at = int(tail)
+            else:
+                started_at = d.stat().st_mtime
+        file_count = sum(1 for _ in deliv.glob("**/*") if _.is_file()) if deliv.exists() else 0
+        out.append({
+            "scan_id": d.name,
+            "session_id": meta.get("id"),
+            "url": meta.get("url"),
+            "repo": meta.get("repo"),
+            "started_at": started_at,
+            "file_count": file_count,
+            "live": meta.get("id") in live_ids,
+        })
+    out.sort(key=lambda r: r["started_at"], reverse=True)
+    return out
+
+
+@app.get("/api/scans")
+def list_scans():
+    """Merged view of in-memory sessions and on-disk historical scans."""
+    return {"scans": _historical_scans()}
+
+
+@app.get("/api/scans/{name}/deliverables")
+def list_scan_deliverables(name: str):
+    folder = _scan_folder(name)
+    deliv = folder / "deliverables"
+    if not deliv.exists():
+        return {"files": []}
+    files = []
+    for f in sorted(deliv.glob("**/*")):
+        if f.is_file():
+            files.append({"path": str(f.relative_to(deliv)), "bytes": f.stat().st_size})
+    return {"files": files}
+
+
+@app.get("/api/scans/{name}/deliverables/{path:path}")
+def read_scan_deliverable(name: str, path: str):
+    folder = _scan_folder(name)
+    base = (folder / "deliverables").resolve()
+    target = (base / path).resolve()
+    if not str(target).startswith(str(base)):
+        raise HTTPException(status_code=400, detail="path traversal")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="not found")
+    return JSONResponse({"path": path, "content": target.read_text(errors="replace")})
+
+
+@app.get("/api/scans/{name}/deliverables.zip")
+def download_scan_zip(name: str):
+    folder = _scan_folder(name)
+    base = folder / "deliverables"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if base.exists():
+            for f in base.glob("**/*"):
+                if f.is_file():
+                    zf.write(f, arcname=str(f.relative_to(base)))
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="dapper-{name}.zip"'},
+    )
+
+
 @app.get("/api/sessions/{sid}/deliverables.zip")
 def download_deliverables_zip(sid: str):
     s = get_session(sid)
@@ -354,6 +463,16 @@ INDEX_HTML = r"""<!doctype html>
   .session-info .row .v { color:#d8dee9; word-break:break-all; text-align:right; }
   .session-info .actions { display:flex; gap:6px; margin-top:10px; }
   .session-info .actions button { flex:1; margin:0; padding:5px 8px; font-size:11px; background:#1f2937; border-color:#374151; }
+  .recent-scans { margin-top:18px; padding-top:14px; border-top:1px solid #1f2937; }
+  .recent-scans h3 { margin:0 0 8px 0; font-size:13px; color:#9aa5b1; display:flex; align-items:center; gap:6px; }
+  .recent-scans h3 .count { color:#6b7280; font-size:11px; font-weight:normal; }
+  .recent-scans .empty { color:#6b7280; font-size:11px; }
+  .recent-scans .scan-row { padding:8px 10px; margin-bottom:4px; border:1px solid #1f2937; border-radius:5px; cursor:pointer; font-size:11px; }
+  .recent-scans .scan-row:hover { background:#11151b; border-color:#374151; }
+  .recent-scans .scan-row .top { display:flex; justify-content:space-between; gap:6px; align-items:baseline; }
+  .recent-scans .scan-row .url { color:#d8dee9; word-break:break-all; flex:1; font-size:12px; }
+  .recent-scans .scan-row .badge { font-size:10px; color:#10b981; border:1px solid #10b981; padding:1px 5px; border-radius:8px; flex-shrink:0; }
+  .recent-scans .scan-row .meta { color:#6b7280; margin-top:3px; display:flex; justify-content:space-between; }
   details.setup-collapse { margin-top:10px; }
   details.setup-collapse > summary { cursor:pointer; font-size:11px; color:#9aa5b1; list-style:none; padding:4px 0; }
   details.setup-collapse > summary::-webkit-details-marker { display:none; }
