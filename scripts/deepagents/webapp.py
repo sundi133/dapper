@@ -21,6 +21,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
+from . import db
 from .session import (
     drain_events,
     get_session,
@@ -38,6 +39,11 @@ CONFIGS_DIR = REPO_ROOT / "configs"
 AUDIT_DIR = REPO_ROOT / "audit-logs"
 
 app = FastAPI(title="Dapper DeepAgents")
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    db.init()
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +228,10 @@ def list_deliverables(sid: str):
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
     p = Path(s.deliverables)
+    # Best-effort sync to Postgres so historical lookups see the same files
+    # the agent just wrote. No-op when the DB is disabled.
+    if db.enabled():
+        db.sync_from_disk(s.id, str(p))
     if not p.exists():
         return {"files": []}
     files = []
@@ -232,25 +242,39 @@ def list_deliverables(sid: str):
 
 
 # ---------------------------------------------------------------------------
-# Historical scans (persisted on disk under AUDIT_DIR)
+# Historical scans
+#
+# Two sources, transparently merged:
+#   1. Postgres (preferred) — survives container restarts.
+#   2. The audit-logs/ directory — works for legacy scans pre-DB and for
+#      local dev when DATABASE_URL isn't set.
+#
+# The URL key is whichever identifier the frontend hands back: a DB scan id
+# (session UUID, 12 hex) or a disk folder name (host_deepagent-<epoch>).
 # ---------------------------------------------------------------------------
 
-def _scan_folder(name: str) -> Path:
-    """Resolve a scan folder name (e.g. 'host_deepagent-1234567890') under
-    AUDIT_DIR, with a path-traversal guard."""
+def _scan_folder(name: str) -> Optional[Path]:
+    """Return the matching folder under AUDIT_DIR if one exists, else None."""
     if "/" in name or ".." in name:
         raise HTTPException(status_code=400, detail="invalid scan id")
     p = (AUDIT_DIR / name).resolve()
     if not str(p).startswith(str(AUDIT_DIR.resolve())):
         raise HTTPException(status_code=400, detail="path traversal")
-    if not p.is_dir():
-        raise HTTPException(status_code=404, detail="scan not found")
-    return p
+    return p if p.is_dir() else None
 
 
-def _historical_scans() -> list[dict]:
-    """Walk AUDIT_DIR and return every scan folder that has either a
-    meta.json or a non-empty deliverables/ directory."""
+def _resolve_scan_folder_for_db_id(scan_id: str) -> Optional[Path]:
+    """If the DB knows a scan_folder for this id, try resolving it on disk."""
+    if not db.enabled():
+        return None
+    for s in db.list_scans():
+        if s["id"] == scan_id and s.get("scan_folder"):
+            return _scan_folder(s["scan_folder"])
+    return None
+
+
+def _disk_scans() -> list[dict]:
+    """Walk AUDIT_DIR for scan folders with meta.json or deliverables/."""
     if not AUDIT_DIR.exists():
         return []
     live_ids = {s["id"] for s in list_sessions()}
@@ -269,38 +293,58 @@ def _historical_scans() -> list[dict]:
                 meta = json.loads(meta_path.read_text())
             except Exception:
                 meta = {}
-        # Derive timestamp from folder name suffix (deepagent-<epoch>) when
-        # meta is missing, so legacy scans still show.
         started_at = meta.get("started_at")
         if started_at is None:
             tail = d.name.rsplit("-", 1)[-1]
-            if tail.isdigit():
-                started_at = int(tail)
-            else:
-                started_at = d.stat().st_mtime
+            started_at = int(tail) if tail.isdigit() else d.stat().st_mtime
         file_count = sum(1 for _ in deliv.glob("**/*") if _.is_file()) if deliv.exists() else 0
+        # Prefer the session id as the canonical scan_id when meta has it —
+        # that's what Postgres uses, so both sources align on the same key.
+        scan_id = meta.get("id") or d.name
         out.append({
-            "scan_id": d.name,
-            "session_id": meta.get("id"),
+            "scan_id": scan_id,
+            "scan_folder": d.name,
             "url": meta.get("url"),
             "repo": meta.get("repo"),
             "started_at": started_at,
             "file_count": file_count,
             "live": meta.get("id") in live_ids,
         })
-    out.sort(key=lambda r: r["started_at"], reverse=True)
     return out
 
 
 @app.get("/api/scans")
-def list_scans():
-    """Merged view of in-memory sessions and on-disk historical scans."""
-    return {"scans": _historical_scans()}
+def list_scans_endpoint():
+    """Merged scan list from Postgres + disk. DB rows take precedence."""
+    live_ids = {s["id"] for s in list_sessions()}
+    by_id: dict[str, dict] = {}
+    # Postgres is the source of truth when present.
+    for s in db.list_scans():
+        by_id[s["id"]] = {
+            "scan_id": s["id"],
+            "scan_folder": s.get("scan_folder"),
+            "url": s.get("url"),
+            "repo": s.get("repo"),
+            "started_at": s.get("started_at"),
+            "file_count": s.get("file_count", 0),
+            "live": s["id"] in live_ids,
+            "status": s.get("status"),
+        }
+    # Backfill anything found on disk that the DB doesn't know about
+    # (legacy scans, or DB-disabled mode).
+    for s in _disk_scans():
+        by_id.setdefault(s["scan_id"], s)
+    out = sorted(by_id.values(), key=lambda r: r.get("started_at") or 0, reverse=True)
+    return {"scans": out}
 
 
 @app.get("/api/scans/{name}/deliverables")
 def list_scan_deliverables(name: str):
-    folder = _scan_folder(name)
+    if db.enabled() and db.scan_exists(name):
+        return {"files": db.list_deliverables(name)}
+    folder = _resolve_scan_folder_for_db_id(name) or _scan_folder(name)
+    if not folder:
+        raise HTTPException(status_code=404, detail="scan not found")
     deliv = folder / "deliverables"
     if not deliv.exists():
         return {"files": []}
@@ -313,7 +357,14 @@ def list_scan_deliverables(name: str):
 
 @app.get("/api/scans/{name}/deliverables/{path:path}")
 def read_scan_deliverable(name: str, path: str):
-    folder = _scan_folder(name)
+    if db.enabled() and db.scan_exists(name):
+        content = db.get_deliverable(name, path)
+        if content is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return JSONResponse({"path": path, "content": content})
+    folder = _resolve_scan_folder_for_db_id(name) or _scan_folder(name)
+    if not folder:
+        raise HTTPException(status_code=404, detail="scan not found")
     base = (folder / "deliverables").resolve()
     target = (base / path).resolve()
     if not str(target).startswith(str(base)):
@@ -325,14 +376,21 @@ def read_scan_deliverable(name: str, path: str):
 
 @app.get("/api/scans/{name}/deliverables.zip")
 def download_scan_zip(name: str):
-    folder = _scan_folder(name)
-    base = folder / "deliverables"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        if base.exists():
-            for f in base.glob("**/*"):
-                if f.is_file():
-                    zf.write(f, arcname=str(f.relative_to(base)))
+        if db.enabled() and db.scan_exists(name):
+            for f in db.list_deliverables(name):
+                content = db.get_deliverable(name, f["path"]) or ""
+                zf.writestr(f["path"], content)
+        else:
+            folder = _resolve_scan_folder_for_db_id(name) or _scan_folder(name)
+            if not folder:
+                raise HTTPException(status_code=404, detail="scan not found")
+            base = folder / "deliverables"
+            if base.exists():
+                for f in base.glob("**/*"):
+                    if f.is_file():
+                        zf.write(f, arcname=str(f.relative_to(base)))
     return Response(
         content=buf.getvalue(),
         media_type="application/zip",

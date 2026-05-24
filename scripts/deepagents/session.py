@@ -24,6 +24,7 @@ from typing import Any, Optional
 
 from langchain_core.tools import tool
 
+from . import db
 from .dast_tools import ALL_TOOLS
 from .prompt_loader import load_prompt
 
@@ -66,6 +67,12 @@ class Session:
     def emit(self, kind: str, **payload: Any) -> None:
         evt = {"ts": time.time(), "kind": kind, **payload}
         self.events.put(evt)
+        # Mirror lifecycle changes into Postgres so historical scans survive
+        # an ephemeral container restart.
+        if kind == "status":
+            db.update_status(self.id, payload.get("status", ""))
+        elif kind == "error":
+            db.update_status(self.id, "error", error=payload.get("message"))
 
 
 _sessions: dict[str, Session] = {}
@@ -446,6 +453,7 @@ def start_session(
     )
     # Persist scan metadata next to deliverables/ so the run survives a server
     # restart and shows up in the historical scans list.
+    scan_folder = Path(deliverables).parent.name
     try:
         meta_path = Path(deliverables).parent / "meta.json"
         meta_path.write_text(json.dumps({
@@ -460,6 +468,20 @@ def start_session(
         }, indent=2))
     except Exception:
         pass
+    # Register in Postgres too (no-op if DATABASE_URL is unset). The agent's
+    # write_finding writes happen on disk; webapp.list_deliverables syncs them
+    # into the DB on each live-session refresh.
+    db.upsert_scan(
+        session.id,
+        url=url,
+        repo=repo,
+        model=model,
+        classes=session.classes,
+        skip_exploit=skip_exploit,
+        config_path=config_path,
+        scan_folder=scan_folder,
+        status="pending",
+    )
     register_session(session)
     session.emit("status", status="pending")
     t = threading.Thread(target=_run_agent, args=(session,), daemon=True)
