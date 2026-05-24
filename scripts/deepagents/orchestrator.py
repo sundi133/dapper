@@ -58,7 +58,6 @@ def build_subagent(vuln_class: str, vars_: dict[str, str], tool_names: list[str]
         "name": f"{vuln_class}-vuln",
         "description": f"Hunt for {vuln_class} vulnerabilities against the target.",
         "system_prompt": prompt,
-        "tools": tool_names,
     }
 
 
@@ -71,7 +70,6 @@ def build_exploit_subagent(vuln_class: str, vars_: dict[str, str], tool_names: l
         "name": f"{vuln_class}-exploit",
         "description": f"Exploit confirmed {vuln_class} vulnerabilities (proof only).",
         "system_prompt": prompt,
-        "tools": tool_names,
     }
 
 
