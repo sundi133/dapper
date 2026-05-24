@@ -7,9 +7,12 @@ or:
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import io
 import json
 import os
+import secrets
 import subprocess
 import time
 import zipfile
@@ -17,8 +20,8 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import db
@@ -41,9 +44,149 @@ AUDIT_DIR = REPO_ROOT / "audit-logs"
 app = FastAPI(title="Dapper DeepAgents")
 
 
+# ---------------------------------------------------------------------------
+# Browser auth: a single shared password from $DAPPER_WEB_PASSWORD. When the
+# env var is unset, the gate is disabled and the app stays fully open (this
+# preserves local Docker-compose use where there's nothing to protect).
+#
+# Sessions are stateless HMAC-signed cookies — no DB row per session. The
+# signing key comes from $DAPPER_SESSION_SECRET; if absent we generate a
+# random one at startup, which means all cookies are invalidated on restart
+# (acceptable for an admin tool, and safer than a hardcoded default).
+# ---------------------------------------------------------------------------
+
+COOKIE_NAME = "dapper_session"
+SESSION_TTL_SECONDS = 7 * 24 * 3600
+
+_SESSION_SECRET = (
+    os.environ.get("DAPPER_SESSION_SECRET")
+    or secrets.token_urlsafe(32)
+).encode()
+
+
+def _auth_required() -> Optional[str]:
+    pw = os.environ.get("DAPPER_WEB_PASSWORD") or ""
+    return pw if pw else None
+
+
+def _sign_session(exp_unix: int) -> str:
+    payload = str(exp_unix).encode()
+    sig = hmac.new(_SESSION_SECRET, payload, hashlib.sha256).hexdigest()
+    return f"{exp_unix}.{sig}"
+
+
+def _valid_cookie(value: Optional[str]) -> bool:
+    if not value or "." not in value:
+        return False
+    try:
+        exp_str, sig = value.rsplit(".", 1)
+        exp = int(exp_str)
+    except (ValueError, TypeError):
+        return False
+    if exp < int(time.time()):
+        return False
+    expected = hmac.new(_SESSION_SECRET, exp_str.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, sig)
+
+
+def _wants_html(request: Request) -> bool:
+    """True if this looks like a browser navigation (so we 302 to /login
+    instead of returning 401 JSON)."""
+    accept = request.headers.get("accept", "")
+    return "text/html" in accept and request.method == "GET"
+
+
+# Paths that bypass the cookie gate entirely. /api/scans has its own
+# Bearer-token auth for CI callers and is checked separately below.
+_AUTH_EXEMPT_PATHS = {"/login", "/api/login", "/api/logout", "/api/health", "/api/auth-status"}
+
+
+@app.middleware("http")
+async def _password_gate(request: Request, call_next):
+    pw = _auth_required()
+    if pw is None:
+        return await call_next(request)
+
+    path = request.url.path
+    if path in _AUTH_EXEMPT_PATHS:
+        return await call_next(request)
+
+    # The CI scan-trigger endpoint authenticates via Authorization: Bearer
+    # against the api_keys table — let that path through so the cookie gate
+    # doesn't double-gate it.
+    if path == "/api/scans" and request.method == "POST":
+        if (request.headers.get("authorization") or "").lower().startswith("bearer "):
+            return await call_next(request)
+
+    if _valid_cookie(request.cookies.get(COOKIE_NAME)):
+        return await call_next(request)
+
+    if _wants_html(request):
+        return RedirectResponse(url=f"/login?next={path}", status_code=302)
+    return JSONResponse(
+        {"detail": "authentication required"},
+        status_code=401,
+        headers={"WWW-Authenticate": 'Cookie realm="dapper"'},
+    )
+
+
+class LoginRequest(BaseModel):
+    password: str
+
+
+@app.post("/api/login")
+def login(req: LoginRequest):
+    pw = _auth_required()
+    if pw is None:
+        # Login endpoint is meaningless when auth is disabled — return 204
+        # so the UI can detect "no password set" and skip the login page.
+        return Response(status_code=204)
+    if not hmac.compare_digest(req.password.encode(), pw.encode()):
+        raise HTTPException(status_code=401, detail="invalid password")
+    exp = int(time.time()) + SESSION_TTL_SECONDS
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(
+        COOKIE_NAME,
+        _sign_session(exp),
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=False,  # Set True behind HTTPS-only proxies; lax default works for both.
+        path="/",
+    )
+    return resp
+
+
+@app.post("/api/logout")
+def logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(COOKIE_NAME, path="/")
+    return resp
+
+
+@app.get("/api/auth-status")
+def auth_status(request: Request):
+    """Lets the UI know whether auth is enabled, and if so, whether the
+    current cookie is valid. Always cheap and never 401s."""
+    if _auth_required() is None:
+        return {"required": False, "authenticated": True}
+    return {
+        "required": True,
+        "authenticated": _valid_cookie(request.cookies.get(COOKIE_NAME)),
+    }
+
+
 @app.on_event("startup")
 def _startup() -> None:
     db.init()
+    if _auth_required() is not None:
+        if not os.environ.get("DAPPER_SESSION_SECRET"):
+            import logging
+            logging.getLogger(__name__).warning(
+                "DAPPER_WEB_PASSWORD is set but DAPPER_SESSION_SECRET is not — "
+                "cookies will be invalidated on every restart. Set "
+                "DAPPER_SESSION_SECRET to a stable random value to persist logins."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -729,6 +872,7 @@ INDEX_HTML = r"""<!doctype html>
     <a id="nav-cicd"  data-tab="cicd">CI/CD</a>
   </nav>
   <span class="status" id="hdr-status">disconnected</span>
+  <a id="logout-link" href="#" class="hidden" style="margin-left:12px;color:#9aa5b1;font-size:12px;text-decoration:none;">Sign out</a>
 </header>
 <main id="page-start">
   <aside>
@@ -1639,6 +1783,15 @@ $("composer-input").addEventListener("keydown", (e) => {
 renderClasses();
 loadOptions();
 switchTab(location.hash.slice(1) || "start");
+// Show the sign-out link only when password auth is configured on the server.
+fetch("/api/auth-status").then(r => r.json()).then(s => {
+  if (s.required) $("logout-link").classList.remove("hidden");
+}).catch(() => {});
+$("logout-link").onclick = async (e) => {
+  e.preventDefault();
+  await fetch("/api/logout", {method: "POST"});
+  location.href = "/login";
+};
 // Refresh the runs table every 30s while it's the active tab, so scans
 // running in another browser tab or another worker eventually show up.
 setInterval(() => {
@@ -1648,6 +1801,83 @@ setInterval(() => {
 </body>
 </html>
 """
+
+
+LOGIN_HTML = """<!doctype html>
+<html><head>
+<meta charset="utf-8" />
+<title>Dapper · sign in</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background:#0b0d10; color:#d8dee9; margin:0;
+    display:flex; align-items:center; justify-content:center; min-height:100vh;
+  }
+  .card {
+    background:#11151b; border:1px solid #233040; border-radius:8px;
+    padding:28px 32px; width:340px;
+  }
+  h1 { margin:0 0 4px 0; font-size:18px; }
+  .sub { color:#6b7280; font-size:12px; margin-bottom:20px; }
+  label { display:block; font-size:12px; color:#9aa5b1; margin-top:12px; }
+  input {
+    width:100%; padding:8px 10px; margin-top:4px; box-sizing:border-box;
+    background:#0b0d10; color:#d8dee9; border:1px solid #233040; border-radius:4px;
+    font-family:inherit; font-size:13px;
+  }
+  button {
+    width:100%; margin-top:18px; padding:9px;
+    background:#1f2937; color:#d8dee9; border:1px solid #374151;
+    border-radius:4px; cursor:pointer; font-family:inherit; font-size:13px;
+  }
+  button:hover { background:#233040; }
+  button:disabled { opacity:0.5; cursor:wait; }
+  .err { color:#f87171; font-size:12px; margin-top:10px; min-height:1em; }
+</style>
+</head><body>
+<form class="card" id="f">
+  <h1>Dapper × DeepAgents</h1>
+  <div class="sub">This instance requires a password.</div>
+  <label for="pw">Password</label>
+  <input id="pw" type="password" autocomplete="current-password" autofocus />
+  <button id="btn" type="submit">Sign in</button>
+  <div class="err" id="err"></div>
+</form>
+<script>
+const params = new URLSearchParams(location.search);
+const next = params.get("next") || "/";
+const form = document.getElementById("f");
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const pw = document.getElementById("pw").value;
+  const btn = document.getElementById("btn");
+  const err = document.getElementById("err");
+  err.textContent = "";
+  btn.disabled = true;
+  try {
+    const r = await fetch("/api/login", {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({password: pw}),
+    });
+    if (r.ok) { location.href = next; return; }
+    if (r.status === 204) { location.href = next; return; }
+    const j = await r.json().catch(() => ({detail: "sign-in failed"}));
+    err.textContent = j.detail || "sign-in failed";
+  } catch (e2) {
+    err.textContent = "network error";
+  } finally {
+    btn.disabled = false;
+  }
+};
+</script>
+</body></html>"""
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return LOGIN_HTML
 
 
 @app.get("/", response_class=HTMLResponse)
