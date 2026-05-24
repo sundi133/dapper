@@ -7,16 +7,18 @@ or:
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
 import time
+import zipfile
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from .session import (
@@ -229,6 +231,27 @@ def list_deliverables(sid: str):
     return {"files": files}
 
 
+@app.get("/api/sessions/{sid}/deliverables.zip")
+def download_deliverables_zip(sid: str):
+    s = get_session(sid)
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    base = Path(s.deliverables)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if base.exists():
+            for f in base.glob("**/*"):
+                if f.is_file():
+                    zf.write(f, arcname=str(f.relative_to(base)))
+    host = (s.url.split("://", 1)[-1].split("/", 1)[0].replace(":", "_") or "session")
+    filename = f"dapper-{host}-{sid[:8]}.zip"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.get("/api/sessions/{sid}/deliverables/{path:path}")
 def read_deliverable(sid: str, path: str):
     s = get_session(sid)
@@ -311,9 +334,49 @@ INDEX_HTML = r"""<!doctype html>
   .composer textarea { flex:1; min-height:50px; max-height:160px; resize:vertical; margin:0; }
   .composer button { width:auto; align-self:stretch; margin:0; padding:0 18px; }
   .composer .hint { font-size:10px; color:#6b7280; margin-top:4px; }
-  .deliverables { padding:14px 18px; border-top:1px solid #1f2937; font-size:12px; }
-  .deliverables h3 { margin:0 0 8px 0; font-size:13px; color:#9aa5b1; }
-  .deliverables a { color:#60a5fa; text-decoration:none; display:block; padding:2px 0; word-break:break-all; }
+  .deliverables { padding:14px 0 0 0; margin-top:14px; border-top:1px solid #1f2937; font-size:12px; }
+  .deliverables .head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .deliverables h3 { margin:0; font-size:13px; color:#9aa5b1; }
+  .deliverables .dl-zip { width:auto; padding:4px 10px; margin:0; font-size:11px; background:#1f2937; border-color:#374151; }
+  .deliverables .dl-zip:disabled { opacity:0.4; }
+  .deliverables .empty { color:#6b7280; font-size:11px; padding:8px 0; line-height:1.5; }
+  .deliverables .file-row { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:4px; cursor:pointer; word-break:break-all; }
+  .deliverables .file-row:hover { background:#11151b; }
+  .deliverables .file-row .name { color:#60a5fa; flex:1; }
+  .deliverables .file-row .size { color:#6b7280; font-size:10px; }
+  .deliverables .file-row.exec-summary { background:#0f2742; border:1px solid #1d3a5f; margin-bottom:6px; padding:8px 10px; }
+  .deliverables .file-row.exec-summary .name { color:#93c5fd; font-weight:600; }
+  .deliverables .file-row.exec-summary::before { content:"★"; color:#fbbf24; margin-right:2px; }
+  .session-info { padding:10px 12px; background:#0f141a; border:1px solid #1f2937; border-radius:6px; font-size:11px; color:#9aa5b1; }
+  .session-info .row { display:flex; justify-content:space-between; gap:8px; }
+  .session-info .row + .row { margin-top:4px; }
+  .session-info .row .k { color:#6b7280; }
+  .session-info .row .v { color:#d8dee9; word-break:break-all; text-align:right; }
+  .session-info .actions { display:flex; gap:6px; margin-top:10px; }
+  .session-info .actions button { flex:1; margin:0; padding:5px 8px; font-size:11px; background:#1f2937; border-color:#374151; }
+  details.setup-collapse { margin-top:10px; }
+  details.setup-collapse > summary { cursor:pointer; font-size:11px; color:#9aa5b1; list-style:none; padding:4px 0; }
+  details.setup-collapse > summary::-webkit-details-marker { display:none; }
+  details.setup-collapse > summary::before { content:"▸ "; }
+  details.setup-collapse[open] > summary::before { content:"▾ "; }
+  /* Markdown viewer overlay */
+  .viewer-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50; display:flex; align-items:stretch; justify-content:flex-end; }
+  .viewer { width:min(820px, 92vw); height:100vh; background:#0b0d10; border-left:1px solid #1f2937; display:flex; flex-direction:column; }
+  .viewer .vhead { display:flex; align-items:center; gap:10px; padding:12px 18px; border-bottom:1px solid #1f2937; }
+  .viewer .vhead .title { flex:1; font-size:13px; color:#d8dee9; word-break:break-all; }
+  .viewer .vhead button { width:auto; margin:0; padding:5px 10px; font-size:11px; background:#1f2937; border-color:#374151; }
+  .viewer .vbody { flex:1; overflow:auto; padding:20px 28px; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:14px; line-height:1.6; color:#e5e7eb; }
+  .viewer .vbody.raw { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; white-space:pre-wrap; word-break:break-all; }
+  .viewer .vbody h1 { font-size:1.5em; margin:0 0 12px 0; padding-bottom:6px; border-bottom:1px solid #1f2937; }
+  .viewer .vbody h2 { font-size:1.25em; margin:18px 0 8px 0; color:#f3f4f6; }
+  .viewer .vbody h3 { font-size:1.1em; margin:14px 0 6px 0; color:#e5e7eb; }
+  .viewer .vbody p { margin:0 0 10px 0; }
+  .viewer .vbody ul,.viewer .vbody ol { margin:6px 0 10px 0; padding-left:24px; }
+  .viewer .vbody code { background:#11151b; padding:2px 5px; border-radius:3px; font-family:ui-monospace,monospace; font-size:0.9em; }
+  .viewer .vbody pre { background:#070a0e; border:1px solid #1f2937; padding:12px 14px; border-radius:5px; overflow:auto; font-size:12px; }
+  .viewer .vbody pre code { background:transparent; padding:0; }
+  .viewer .vbody a { color:#60a5fa; }
+  .viewer .vbody strong { color:#f3f4f6; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -324,6 +387,18 @@ INDEX_HTML = r"""<!doctype html>
 </header>
 <main>
   <aside>
+    <div id="session-info" class="session-info hidden">
+      <div class="row"><span class="k">Target</span><span class="v" id="si-url"></span></div>
+      <div class="row"><span class="k">Repo</span><span class="v" id="si-repo"></span></div>
+      <div class="row"><span class="k">Status</span><span class="v" id="si-status">starting…</span></div>
+      <div class="actions">
+        <button id="new-session-btn">New pentest</button>
+      </div>
+      <details class="setup-collapse">
+        <summary>Show pentest config</summary>
+        <div id="setup-readonly" style="margin-top:6px;color:#6b7280;font-size:11px;"></div>
+      </details>
+    </div>
     <div id="setup">
       <label>Target URL</label>
       <input id="url" placeholder="https://target.example" />
@@ -352,10 +427,28 @@ INDEX_HTML = r"""<!doctype html>
       <div id="warn" style="color:#f87171;font-size:12px;margin-top:8px"></div>
     </div>
     <div class="deliverables hidden" id="del-panel">
-      <h3>Deliverables</h3>
-      <div id="del-list"></div>
+      <div class="head">
+        <h3>Reports &amp; Findings</h3>
+        <button id="dl-zip" class="dl-zip" disabled title="Download all deliverables as a zip">⤓ .zip</button>
+      </div>
+      <div id="del-list">
+        <div class="empty" id="del-empty">
+          No reports yet. The agent will write findings here as it works — the
+          <strong>executive summary</strong> appears when the run completes.
+        </div>
+      </div>
     </div>
   </aside>
+  <div id="viewer-backdrop" class="viewer-backdrop hidden">
+    <div class="viewer">
+      <div class="vhead">
+        <span class="title" id="viewer-title"></span>
+        <button id="viewer-download">⤓ download</button>
+        <button id="viewer-close">✕ close</button>
+      </div>
+      <div class="vbody" id="viewer-body"></div>
+    </div>
+  </div>
   <section class="chat">
     <div class="feed" id="feed">
       <div class="msg status">Configure on the left and click "Start pentest" to begin a chat with the agent.</div>
@@ -602,20 +695,103 @@ function handleEvent(evt) {
   }
 }
 
+function fmtBytes(n) {
+  if (n < 1024) return n + "b";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + "kb";
+  return (n / 1024 / 1024).toFixed(1) + "mb";
+}
+
+function isExecSummary(path) {
+  return /(^|\/)0*0[-_].*executive[-_]?summary/i.test(path) || /executive[-_]?summary\.md$/i.test(path);
+}
+
+function makeFileRow(f) {
+  const row = document.createElement("div");
+  row.className = "file-row" + (isExecSummary(f.path) ? " exec-summary" : "");
+  row.onclick = () => openViewer(f.path);
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = isExecSummary(f.path) ? `Executive summary — ${f.path}` : f.path;
+  const size = document.createElement("span");
+  size.className = "size";
+  size.textContent = fmtBytes(f.bytes);
+  row.appendChild(name);
+  row.appendChild(size);
+  return row;
+}
+
 async function refreshDeliverables() {
   if (!session) return;
   const data = await (await fetch(`/api/sessions/${session}/deliverables`)).json();
   const list = $("del-list");
   list.innerHTML = "";
-  for (const f of data.files) {
-    const a = document.createElement("a");
-    a.href = `/api/sessions/${session}/deliverables/${encodeURIComponent(f.path)}`;
-    a.target = "_blank";
-    a.textContent = `${f.path} (${f.bytes}b)`;
-    list.appendChild(a);
+  if (!data.files.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = 'No reports yet. The agent will write findings here as it works — the <strong>executive summary</strong> appears when the run completes.';
+    list.appendChild(empty);
+    $("dl-zip").disabled = true;
+    return;
   }
-  $("del-panel").classList.toggle("hidden", !data.files.length);
+  $("dl-zip").disabled = false;
+  // Pin executive summary at the top; sort the rest by path.
+  const sorted = data.files.slice().sort((a, b) => {
+    const ea = isExecSummary(a.path), eb = isExecSummary(b.path);
+    if (ea !== eb) return ea ? -1 : 1;
+    return a.path.localeCompare(b.path);
+  });
+  for (const f of sorted) list.appendChild(makeFileRow(f));
 }
+
+let currentViewerPath = null;
+async function openViewer(path) {
+  currentViewerPath = path;
+  $("viewer-title").textContent = path;
+  $("viewer-backdrop").classList.remove("hidden");
+  const body = $("viewer-body");
+  body.className = "vbody";
+  body.textContent = "Loading…";
+  try {
+    const data = await (await fetch(`/api/sessions/${session}/deliverables/${encodeURIComponent(path)}`)).json();
+    if (/\.md$/i.test(path)) {
+      body.innerHTML = renderMd(data.content || "(empty)");
+    } else {
+      body.className = "vbody raw";
+      body.textContent = data.content || "(empty)";
+    }
+  } catch (e) {
+    body.textContent = "Failed to load: " + e;
+  }
+}
+function closeViewer() {
+  $("viewer-backdrop").classList.add("hidden");
+  currentViewerPath = null;
+}
+$("viewer-close").onclick = closeViewer;
+$("viewer-backdrop").onclick = (e) => { if (e.target.id === "viewer-backdrop") closeViewer(); };
+$("viewer-download").onclick = () => {
+  if (!currentViewerPath || !session) return;
+  const a = document.createElement("a");
+  a.href = `/api/sessions/${session}/deliverables/${encodeURIComponent(currentViewerPath)}`;
+  a.target = "_blank";
+  a.click();
+};
+$("dl-zip").onclick = () => {
+  if (!session) return;
+  window.location.href = `/api/sessions/${session}/deliverables.zip`;
+};
+$("new-session-btn").onclick = () => {
+  if (!confirm("Start a new pentest? The current chat will be cleared (the session keeps running in the background).")) return;
+  session = null;
+  $("session-info").classList.add("hidden");
+  $("setup").classList.remove("hidden");
+  $("del-panel").classList.add("hidden");
+  $("hdr-status").textContent = "disconnected";
+  $("feed").innerHTML = '<div class="msg status">Configure on the left and click "Start pentest" to begin a chat with the agent.</div>';
+  $("composer-input").disabled = true;
+  $("send").disabled = true;
+  $("start").disabled = false;
+};
 
 $("start").onclick = async () => {
   const url = $("url").value.trim();
@@ -648,7 +824,16 @@ $("start").onclick = async () => {
   }
   const data = await res.json();
   session = data.id;
-  $("hdr-status").textContent = `session ${session}`;
+  $("hdr-status").textContent = `session ${session.slice(0, 12)}`;
+  // Swap sidebar into session mode.
+  $("setup").classList.add("hidden");
+  $("session-info").classList.remove("hidden");
+  $("del-panel").classList.remove("hidden");
+  $("si-url").textContent = data.url || url;
+  $("si-repo").textContent = data.repo || "(none — pure DAST)";
+  $("si-status").textContent = "running";
+  $("setup-readonly").textContent = `classes: ${(body.classes || []).join(", ") || "(all)"}\nskip_exploit: ${body.skip_exploit}\nconfig: ${body.config || (body.config_yaml ? "(inline yaml)" : "(none)")}`;
+  refreshDeliverables();
   if (body.initial_message) addPlainBubble("user", body.initial_message, `you · initial`);
   $("composer-input").disabled = false;
   $("send").disabled = false;
@@ -657,10 +842,11 @@ $("start").onclick = async () => {
   es.onmessage = (m) => {
     const evt = JSON.parse(m.data);
     handleEvent(evt);
-    if (evt.kind === "step" || evt.kind === "status") refreshDeliverables();
+    if (evt.kind === "step" || evt.kind === "status" || evt.kind === "tool_result") refreshDeliverables();
+    if (evt.kind === "status") $("si-status").textContent = evt.status;
     if (evt.kind === "status" && evt.status === "error") es.close();
   };
-  es.onerror = () => { $("hdr-status").textContent = `session ${session} · stream closed`; };
+  es.onerror = () => { $("hdr-status").textContent = `session ${session.slice(0, 12)} · stream closed`; };
 };
 
 async function sendChat() {
