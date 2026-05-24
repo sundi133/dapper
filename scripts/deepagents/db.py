@@ -16,10 +16,13 @@ directory would otherwise be wiped.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import secrets
 import threading
+import uuid
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -89,6 +92,17 @@ def init() -> bool:
                     );
                 """)
                 cur.execute("CREATE INDEX IF NOT EXISTS scans_started_at_idx ON scans (started_at DESC);")
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS api_keys (
+                        id           TEXT PRIMARY KEY,
+                        key_hash     TEXT NOT NULL UNIQUE,
+                        prefix       TEXT NOT NULL,
+                        label        TEXT,
+                        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        last_used_at TIMESTAMPTZ,
+                        revoked_at   TIMESTAMPTZ
+                    );
+                """)
                 conn.commit()
             log.info("Postgres DB initialized")
             return True
@@ -263,4 +277,109 @@ def scan_exists(scan_id: str) -> bool:
             cur.execute("SELECT 1 FROM scans WHERE id = %s;", (scan_id,))
             return cur.fetchone() is not None
     except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# API keys (for CI/CD callers hitting /api/scans with a Bearer token).
+# Only sha256 hashes are stored — the plaintext is shown to the user exactly
+# once at creation time and never persisted.
+# ---------------------------------------------------------------------------
+
+_KEY_PREFIX = "dpr_"
+
+
+def _hash_key(plaintext: str) -> str:
+    return hashlib.sha256(plaintext.encode()).hexdigest()
+
+
+def create_api_key(label: Optional[str]) -> Optional[dict[str, Any]]:
+    """Mint a new API key. Returns dict with `plaintext` shown once, plus
+    metadata. Returns None if the DB isn't available."""
+    if not _pool:
+        return None
+    plaintext = _KEY_PREFIX + secrets.token_urlsafe(32)
+    key_id = str(uuid.uuid4())
+    prefix = plaintext[: len(_KEY_PREFIX) + 8]  # e.g. "dpr_a1b2c3d4"
+    try:
+        with _pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO api_keys (id, key_hash, prefix, label) "
+                "VALUES (%s, %s, %s, %s);",
+                (key_id, _hash_key(plaintext), prefix, label),
+            )
+            conn.commit()
+        return {
+            "id": key_id,
+            "plaintext": plaintext,
+            "prefix": prefix,
+            "label": label,
+        }
+    except Exception as e:
+        log.warning("create_api_key failed: %s", e)
+        return None
+
+
+def list_api_keys() -> list[dict[str, Any]]:
+    if not _pool:
+        return []
+    try:
+        with _pool.connection() as conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, prefix, label,
+                       EXTRACT(EPOCH FROM created_at)::BIGINT  AS created_at,
+                       EXTRACT(EPOCH FROM last_used_at)::BIGINT AS last_used_at,
+                       EXTRACT(EPOCH FROM revoked_at)::BIGINT  AS revoked_at
+                FROM api_keys
+                ORDER BY created_at DESC;
+            """)
+            cols = [d.name for d in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except Exception as e:
+        log.warning("list_api_keys failed: %s", e)
+        return []
+
+
+def verify_api_key(plaintext: str) -> Optional[str]:
+    """Return the key id if `plaintext` is a valid, non-revoked key.
+    Bumps last_used_at on success. Returns None otherwise."""
+    if not _pool or not plaintext:
+        return None
+    try:
+        with _pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM api_keys "
+                "WHERE key_hash = %s AND revoked_at IS NULL;",
+                (_hash_key(plaintext),),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            key_id = row[0]
+            cur.execute(
+                "UPDATE api_keys SET last_used_at = NOW() WHERE id = %s;",
+                (key_id,),
+            )
+            conn.commit()
+            return key_id
+    except Exception as e:
+        log.warning("verify_api_key failed: %s", e)
+        return None
+
+
+def revoke_api_key(key_id: str) -> bool:
+    if not _pool:
+        return False
+    try:
+        with _pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE api_keys SET revoked_at = NOW() "
+                "WHERE id = %s AND revoked_at IS NULL;",
+                (key_id,),
+            )
+            updated = cur.rowcount
+            conn.commit()
+            return updated > 0
+    except Exception as e:
+        log.warning("revoke_api_key failed: %s", e)
         return False
