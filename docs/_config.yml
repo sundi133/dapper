@@ -1,0 +1,30 @@
+title: Dapper
+description: Fully autonomous AI pentester — built to break your web app before anyone else does.
+url: "https://sundi133.github.io"
+baseurl: "/dapper"
+
+remote_theme: just-the-docs/just-the-docs
+
+color_scheme: dark
+search_enabled: true
+heading_anchors: true
+
+aux_links:
+  "GitHub":
+    - "https://github.com/sundi133/dapper"
+
+aux_links_new_tab: true
+
+footer_content: 'Dapper Lite is released under the <a href="https://github.com/sundi133/dapper/blob/main/LICENSE">AGPL-3.0</a>. Interested in Dapper Pro? <a href="mailto:info@votal.ai">info@votal.ai</a>.'
+
+# Tell Jekyll which files to ignore.
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - node_modules/
+  - README.md
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
