@@ -86,6 +86,7 @@ class StartRequest(BaseModel):
     url: str
     repo: Optional[str] = None
     repo_git_url: Optional[str] = None
+    repo_git_token: Optional[str] = None  # one-shot; never stored or logged
     config: Optional[str] = None
     config_yaml: Optional[str] = None  # paste-your-own YAML
     classes: Optional[list[str]] = None
@@ -109,12 +110,37 @@ def create_session(req: StartRequest):
         REPOS_DIR.mkdir(parents=True, exist_ok=True)
         target = REPOS_DIR / repo_name
         if not target.exists():
-            proc = subprocess.run(
-                ["git", "clone", "--depth", "1", req.repo_git_url, str(target)],
-                capture_output=True, text=True, timeout=300,
-            )
+            # Build a one-shot Authorization header rather than embedding the
+            # token in the URL — keeps the token out of .git/config, out of
+            # `ps aux` URL substrings, and out of any error path that echoes
+            # the clone URL back. The header is set via `-c` so it lives for
+            # this git invocation only.
+            cmd = ["git"]
+            if req.repo_git_token:
+                import base64 as _b64
+                hdr = _b64.b64encode(f"x-access-token:{req.repo_git_token}".encode()).decode()
+                cmd += ["-c", f"http.extraheader=Authorization: Basic {hdr}"]
+            cmd += ["clone", "--depth", "1", req.repo_git_url, str(target)]
+            env = {
+                **os.environ,
+                # Block interactive credential prompts so a bad token fails
+                # fast instead of hanging the request.
+                "GIT_TERMINAL_PROMPT": "0",
+                "GIT_ASKPASS": "/bin/true",
+                "GCM_INTERACTIVE": "never",
+            }
+            proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=300)
             if proc.returncode != 0:
-                raise HTTPException(status_code=400, detail=f"git clone failed: {proc.stderr[-500:]}")
+                # Strip the header (and any token-looking string) from stderr
+                # before bubbling it back to the client.
+                stderr = proc.stderr
+                if req.repo_git_token:
+                    stderr = stderr.replace(req.repo_git_token, "***")
+                stderr = stderr.replace(hdr, "***") if req.repo_git_token else stderr
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"git clone failed: {stderr[-500:]}",
+                )
     elif repo_name:
         if not (REPOS_DIR / repo_name).is_dir():
             raise HTTPException(status_code=400, detail=f"./repos/{repo_name} does not exist")
@@ -583,6 +609,14 @@ INDEX_HTML = r"""<!doctype html>
       <select id="repo"><option value="">(none — pure DAST)</option></select>
       <label>Or clone a repo by git URL</label>
       <input id="repo-git" placeholder="https://github.com/owner/repo.git" />
+      <label>GitHub token (only needed for private repos)</label>
+      <input id="repo-git-token" type="password" autocomplete="off" spellcheck="false"
+             placeholder="ghp_… or github_pat_… (used once for this clone, not stored)" />
+      <div style="font-size:11px;color:#6b7280;margin-top:-6px;margin-bottom:10px;">
+        Personal access token with <code>repo</code> scope, or a GitHub App
+        installation token. Sent once over TLS, used only for this <code>git
+        clone</code>, never logged or written to disk.
+      </div>
 
       <label>Config source</label>
       <select id="config-mode">
@@ -1082,12 +1116,16 @@ $("start").onclick = async () => {
     url,
     repo: $("repo").value || null,
     repo_git_url: $("repo-git").value.trim() || null,
+    repo_git_token: $("repo-git-token").value || null,
     config: mode === "builtin" ? ($("config").value || null) : null,
     config_yaml: mode === "custom" ? ($("config-yaml").value.trim() || null) : null,
     classes: selectedClasses(),
     skip_exploit: $("skip-exploit").checked,
     initial_message: $("initial-msg").value.trim() || null,
   };
+  // Wipe the token field immediately so it doesn't sit in DOM memory after
+  // the request. The backend uses it once and discards it.
+  $("repo-git-token").value = "";
   $("warn").textContent = "";
   $("start").disabled = true;
   $("feed").innerHTML = "";
