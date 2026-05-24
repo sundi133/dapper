@@ -109,11 +109,11 @@ def submit_message(session: Session, message: str) -> dict[str, Any]:
     if pq:
         pq.answer = message
         pq.answer_event.set()
-        session.emit("user", message=message, kind="answer", qid=pq.qid)
+        session.emit("user", message=message, subkind="answer", qid=pq.qid)
         return {"routed": "answer"}
     session.followup_queue.put(message)
     session.wakeup.set()
-    session.emit("user", message=message, kind="followup")
+    session.emit("user", message=message, subkind="followup")
     return {"routed": "followup"}
 
 
@@ -125,7 +125,7 @@ def submit_answer(session: Session, qid: str, answer: str) -> bool:
         return False
     pq.answer = answer
     pq.answer_event.set()
-    session.emit("user", message=answer, kind="answer", qid=qid)
+    session.emit("user", message=answer, subkind="answer", qid=qid)
     return True
 
 

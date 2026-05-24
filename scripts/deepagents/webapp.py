@@ -680,8 +680,8 @@ function handleEvent(evt) {
     addPlainBubble("question", evt.question, `${ts} · agent question`);
     setPending(evt.question);
   } else if (evt.kind === "user") {
-    addPlainBubble("user", evt.message, `${ts} · you${evt.kind === "answer" ? " (answer)" : ""}`);
-    if (evt.kind === "answer") setPending(null);
+    addPlainBubble("user", evt.message, `${ts} · you${evt.subkind === "answer" ? " (answer)" : ""}`);
+    if (evt.subkind === "answer") setPending(null);
   } else if (evt.kind === "subagent") {
     addPlainBubble("status", `↳ subagent ${evt.name} ${evt.action || ""}`, "");
   } else if (evt.kind === "log") {
