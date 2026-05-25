@@ -103,6 +103,13 @@ def main() -> int:
         deliverables = str(Path("audit-logs") / f"{host}_deepagent-{ts}" / "deliverables")
     Path(deliverables).mkdir(parents=True, exist_ok=True)
 
+    # Per-run http state: cookie jars + JSONL trace next to deliverables.
+    _http_root = Path(deliverables).parent / "http"
+    (_http_root / "cookies").mkdir(parents=True, exist_ok=True)
+    (_http_root / "trace" / "exchanges").mkdir(parents=True, exist_ok=True)
+    os.environ["DAPPER_HTTP_STATE_DIR"] = str(_http_root)
+    os.environ["DAPPER_HTTP_TRACE_DIR"] = str(_http_root / "trace")
+
     print("\n=== Dapper x DeepAgents ===")
     print(f"  URL          : {url}")
     print(f"  Repo         : ./repos/{repo}")
@@ -142,8 +149,25 @@ def main() -> int:
 # Orchestration rules
 - Target: {url}
 - Local repo (for code-assisted DAST): ./repos/{repo}
-- Persist every finding via `write_finding` into: {deliverables}
+- Persist every finding via `write_finding` into: {deliverables}.
+  `write_finding` always overwrites — call it again with the same filename
+  to update a deliverable. Do NOT use the built-in `write_file` for
+  anything under {deliverables}; it refuses to overwrite and will block
+  the run. If you ever see "Cannot write to ... because it already
+  exists", do not ask the operator — either call `write_finding` (to
+  overwrite) or call `edit_file` (to patch in place). Never stop and ask.
 - Phase 1: run recon tools (whatweb, subfinder, nmap, nuclei, http_get).
+- For any non-GET HTTP probe (login POST, registration, password PUT,
+  mass-assignment, BFLA on writes, DELETE, OPTIONS, etc.) use
+  `http_request(method, url, headers_json, body)` — do NOT ask the operator
+  for a curl/shell helper, it is already in your toolbelt.
+- Multipart / file uploads → `http_upload(url, fields_json, files_json)`.
+- Session-aware probes → pass `cookie_jar="<name>"` to http_get/
+  http_request/http_upload. Same name shares state across calls; use
+  distinct names (e.g. "admin", "victim") for different identities.
+- Every HTTP call is auto-logged to {deliverables}/../http/trace/
+  (http-trace.jsonl + exchanges/NNNN-METHOD-host.txt). Cite specific
+  exchange files in findings to give the report request/response evidence.
 - Phase 2: dispatch one vuln subagent per relevant class — in parallel where
   possible. Pass them the recon deliverables paths.
 - Phase 3: for any *confirmed* vuln, hand it to the matching exploit subagent
