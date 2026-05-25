@@ -142,7 +142,13 @@ def main() -> int:
 # Orchestration rules
 - Target: {url}
 - Local repo (for code-assisted DAST): ./repos/{repo}
-- Persist every finding via `write_finding` into: {deliverables}
+- Persist every finding via `write_finding` into: {deliverables}.
+  `write_finding` always overwrites — call it again with the same filename
+  to update a deliverable. Do NOT use the built-in `write_file` for
+  anything under {deliverables}; it refuses to overwrite and will block
+  the run. If you ever see "Cannot write to ... because it already
+  exists", do not ask the operator — either call `write_finding` (to
+  overwrite) or call `edit_file` (to patch in place). Never stop and ask.
 - Phase 1: run recon tools (whatweb, subfinder, nmap, nuclei, http_get).
 - For any non-GET HTTP probe (login POST, registration, password PUT,
   mass-assignment, BFLA on writes, DELETE, OPTIONS, etc.) use

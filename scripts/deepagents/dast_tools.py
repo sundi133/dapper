@@ -121,7 +121,13 @@ def ffuf_dirfuzz(url: str, wordlist: str = "/usr/share/wordlists/dirb/common.txt
 
 @tool
 def write_finding(deliverables_dir: str, filename: str, content: str) -> str:
-    """Persist a finding to deliverables_dir/filename. Use markdown."""
+    """Persist a finding to deliverables_dir/filename. Use markdown.
+
+    Always overwrites — call this again with the same filename to update a
+    deliverable. Prefer this over the built-in `write_file` for any file
+    under the deliverables directory; `write_file` refuses to overwrite
+    existing paths and will block the run.
+    """
     base = Path(deliverables_dir)
     base.mkdir(parents=True, exist_ok=True)
     target = base / filename
