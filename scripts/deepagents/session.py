@@ -351,6 +351,9 @@ def _run_agent(session: Session) -> None:
 - Local repo (for code-assisted DAST): ./repos/{session.repo or '(none — pure DAST)'}
 - Persist every finding via `write_finding` into: {session.deliverables}
 - Phase 1: recon (whatweb, subfinder, nmap, nuclei, http_get).
+- Non-GET HTTP (POST login/register, PUT password, PATCH/DELETE, OPTIONS,
+  mass-assignment, BFLA writes) → use `http_request(method, url,
+  headers_json, body)`. Do not ask the operator for a curl/shell helper.
 - Phase 2: dispatch one vuln subagent per relevant class — in parallel.
 - Phase 3: confirmed vulns → matching exploit subagent (unless skip_exploit).
 - Phase 4: write 00-executive-summary.md in {session.deliverables}.

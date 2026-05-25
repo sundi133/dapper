@@ -144,6 +144,10 @@ def main() -> int:
 - Local repo (for code-assisted DAST): ./repos/{repo}
 - Persist every finding via `write_finding` into: {deliverables}
 - Phase 1: run recon tools (whatweb, subfinder, nmap, nuclei, http_get).
+- For any non-GET HTTP probe (login POST, registration, password PUT,
+  mass-assignment, BFLA on writes, DELETE, OPTIONS, etc.) use
+  `http_request(method, url, headers_json, body)` — do NOT ask the operator
+  for a curl/shell helper, it is already in your toolbelt.
 - Phase 2: dispatch one vuln subagent per relevant class — in parallel where
   possible. Pass them the recon deliverables paths.
 - Phase 3: for any *confirmed* vuln, hand it to the matching exploit subagent

@@ -40,6 +40,43 @@ def http_get(url: str, headers_json: str = "{}") -> str:
 
 
 @tool
+def http_request(
+    method: str,
+    url: str,
+    headers_json: str = "{}",
+    body: str = "",
+) -> str:
+    """Send an HTTP request with any verb (POST/PUT/PATCH/DELETE/OPTIONS/HEAD/GET).
+
+    Args:
+      method: HTTP verb, case-insensitive (e.g. "POST").
+      url: full target URL.
+      headers_json: JSON object of extra headers, e.g.
+        '{"Content-Type":"application/json","Authorization":"Bearer ..."}'.
+      body: raw request body. For JSON, pass the serialized string and set
+        Content-Type in headers_json.
+
+    Returns response headers + body (truncated). Follows redirects.
+    """
+    verb = (method or "GET").upper()
+    allowed = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}
+    if verb not in allowed:
+        return f"ERROR: unsupported method {verb!r}; allowed: {sorted(allowed)}"
+    try:
+        headers = json.loads(headers_json or "{}")
+    except json.JSONDecodeError as exc:
+        return f"ERROR: headers_json is not valid JSON: {exc}"
+    cmd = ["curl", "-sSL", "-D", "-", "--max-time", "30", "-X", verb]
+    for k, v in headers.items():
+        cmd += ["-H", f"{k}: {v}"]
+    if body:
+        # --data-raw avoids curl's @file interpretation of a leading '@'.
+        cmd += ["--data-raw", body]
+    cmd.append(url)
+    return _run(cmd, timeout=45)
+
+
+@tool
 def nuclei_scan(url: str, templates: str = "cves,vulnerabilities,exposures") -> str:
     """Run a nuclei scan against url with a comma-separated list of template tags."""
     return _run(["nuclei", "-u", url, "-tags", templates, "-silent", "-j"], timeout=900)
@@ -106,6 +143,7 @@ def read_file(path: str) -> str:
 
 ALL_TOOLS = [
     http_get,
+    http_request,
     nuclei_scan,
     nmap_scan,
     subfinder_scan,
