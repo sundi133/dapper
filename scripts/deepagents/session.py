@@ -12,6 +12,7 @@ human input over a single chat channel:
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import threading
 import time
@@ -315,6 +316,15 @@ def _run_agent(session: Session) -> None:
         session.status = "running"
         session.emit("status", status="running")
 
+        # Per-session http state: cookie jars live next to deliverables (so
+        # they survive the run) and trace logs land in deliverables/../http/
+        # so the report agent can cite individual exchanges by path.
+        _http_root = Path(session.deliverables).parent / "http"
+        (_http_root / "cookies").mkdir(parents=True, exist_ok=True)
+        (_http_root / "trace" / "exchanges").mkdir(parents=True, exist_ok=True)
+        os.environ["DAPPER_HTTP_STATE_DIR"] = str(_http_root)
+        os.environ["DAPPER_HTTP_TRACE_DIR"] = str(_http_root / "trace")
+
         config_context = ""
         login_instructions = ""
         if session.config_path:
@@ -360,6 +370,16 @@ def _run_agent(session: Session) -> None:
 - Non-GET HTTP (POST login/register, PUT password, PATCH/DELETE, OPTIONS,
   mass-assignment, BFLA writes) → use `http_request(method, url,
   headers_json, body)`. Do not ask the operator for a curl/shell helper.
+- Multipart / file uploads → use `http_upload(url, fields_json, files_json)`.
+- For session-aware probes (login then exercise authed endpoints, or
+  swap between two identities for BOLA/BFLA), pass `cookie_jar="<name>"`
+  to http_get/http_request/http_upload. The same name shares state
+  across calls; use distinct names (e.g. "admin", "victim") for
+  different identities. `clear_cookie_jar` resets one; `list_cookie_jars`
+  shows what you have.
+- Every HTTP call is auto-logged to {session.deliverables}/../http/trace/
+  (http-trace.jsonl + exchanges/NNNN-METHOD-host.txt). Cite specific
+  exchange files in findings to give the report request/response evidence.
 - Phase 2: dispatch one vuln subagent per relevant class — in parallel.
 - Phase 3: confirmed vulns → matching exploit subagent (unless skip_exploit).
 - Phase 4: write 00-executive-summary.md in {session.deliverables}.
