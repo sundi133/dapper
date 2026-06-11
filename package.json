@@ -25,6 +25,7 @@
     "figlet": "^1.9.3",
     "gradient-string": "^3.0.0",
     "js-yaml": "^4.1.0",
+    "playwright": "^1.50.0",
     "zod": "^4.3.6",
     "zx": "^8.0.0"
   },
