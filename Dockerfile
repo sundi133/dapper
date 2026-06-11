@@ -112,6 +112,12 @@ WORKDIR /app
 COPY package*.json ./
 COPY mcp-server/package*.json ./mcp-server/
 
+# Playwright must NOT download its own browser during install — the image ships
+# a system Chromium (installed above) that render-pdf.ts targets via
+# PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH. Set this before npm ci so the postinstall
+# step is skipped.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 # Install Node.js dependencies (including devDependencies for TypeScript build)
 RUN npm ci && \
     cd mcp-server && npm ci && cd .. && \

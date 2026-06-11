@@ -68,6 +68,7 @@ import {
   getGitCommitHash,
 } from '../utils/git-manager.js';
 import { assembleFinalReport, injectModelIntoReport } from '../phases/reporting.js';
+import { enrichFindings, renderAllReports } from '../reporting/orchestrate.js';
 import { getPromptNameForAgent } from '../types/agents.js';
 import { AuditSession } from '../audit/index.js';
 import type { WorkflowSummary } from '../audit/workflow-logger.js';
@@ -480,6 +481,50 @@ export async function injectReportMetadataActivity(input: ActivityInput): Promis
     const err = error as Error;
     console.log(chalk.yellow(`⚠️ Error injecting model into report: ${err.message}`));
     // Don't throw - this is a non-critical enhancement
+  }
+}
+
+/**
+ * Enrich specialist evidence into a canonical, schema-validated findings.json.
+ * Runs one Claude pass (report-enrich prompt) that writes deliverables/findings.json.
+ * Non-fatal: on failure the legacy Markdown report from runReportAgent remains.
+ */
+export async function enrichFindingsActivity(input: ActivityInput): Promise<void> {
+  const { webUrl, repoPath, subDir, configPath, pipelineTestingMode = false } = input;
+  console.log(chalk.blue('🧮 Enriching findings into findings.json...'));
+  try {
+    // Resolve config the same way runAgentActivity does, then load the prompt.
+    let distributedConfig: DistributedConfig | null = null;
+    if (configPath) {
+      const config = await parseConfig(configPath);
+      distributedConfig = distributeConfig(config);
+    }
+    const prompt = await loadPrompt(
+      'report-enrich',
+      { webUrl, repoPath, ...(subDir && { subDir }) },
+      distributedConfig,
+      pipelineTestingMode
+    );
+    await enrichFindings(prompt, repoPath);
+  } catch (error) {
+    const err = error as Error;
+    console.log(chalk.yellow(`⚠️ Findings enrichment failed (non-fatal): ${err.message}`));
+  }
+}
+
+/**
+ * Render findings.json into the polished HTML / PDF / enhanced Markdown / CSV
+ * deliverables. Non-fatal: each output is isolated, and a failure here leaves
+ * the legacy Markdown report intact.
+ */
+export async function renderReportActivity(input: ActivityInput): Promise<void> {
+  const { repoPath, outputPath } = input;
+  console.log(chalk.blue('🎨 Rendering HTML / Markdown / CSV / PDF reports...'));
+  try {
+    await renderAllReports(repoPath, outputPath);
+  } catch (error) {
+    const err = error as Error;
+    console.log(chalk.yellow(`⚠️ Report rendering failed (non-fatal): ${err.message}`));
   }
 }
 

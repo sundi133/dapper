@@ -346,6 +346,12 @@ export async function pentestPipelineWorkflow(
     state.agentMetrics['report'] = await a.runReportAgent(activityInput);
     state.completedAgents.push('report');
 
+    // Enrich specialist evidence into a canonical findings.json
+    await a.enrichFindingsActivity(activityInput);
+
+    // Render the polished HTML / PDF / enhanced Markdown / CSV deliverables
+    await a.renderReportActivity(activityInput);
+
     // Inject model metadata into the final report
     await a.injectReportMetadataActivity(activityInput);
 
