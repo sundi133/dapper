@@ -1,0 +1,9 @@
+# Local-preview overrides — layered on top of _config.yml:
+#   bundle exec jekyll serve --config _config.yml,_config.preview.yml
+# Uses the just-the-docs gem locally instead of the remote theme.
+theme: just-the-docs
+remote_theme:
+url: "http://localhost:4000"
+baseurl: ""
+plugins:
+  - jekyll-seo-tag

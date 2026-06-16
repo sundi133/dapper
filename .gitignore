@@ -4,3 +4,11 @@ audit-logs/
 dist/
 repos/
 scripts/deepagents/__pycache__/
+
+# Jekyll docs local build artifacts
+docs/_site/
+docs/.sass-cache/
+docs/.jekyll-cache/
+docs/.bundle/
+docs/vendor/
+docs/Gemfile.preview.lock

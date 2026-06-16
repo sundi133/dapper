@@ -1,18 +1,23 @@
 ---
 title: Disclaimers
-nav_order: 9
+parent: Resources
+nav_order: 5
+permalink: /resources/disclaimers
 ---
 
 # Disclaimers
 {: .no_toc }
 
-Please review these guidelines carefully before using Dapper Lite. As a
-user, you are responsible for your actions and assume all liability.
+Please review these guidelines carefully before using Dapper Lite. Dapper is
+an **active exploitation tool, not a passive scanner** — it executes real
+attacks to prove vulnerabilities. As a user, you are responsible for your
+actions and assume all liability. The two rules that matter most: only test
+systems you are authorized to test, and never point it at production.
 
 1. TOC
 {:toc}
 
-## 1. Potential for mutative effects — pick the right environment
+## Potential for mutative effects — pick the right environment
 
 Dapper is **not a passive scanner**. The exploitation agents are designed to
 actively execute attacks to confirm vulnerabilities. This process can have
@@ -26,12 +31,20 @@ effects include — but are not limited to — creating new users, modifying or
 deleting data, compromising test accounts, and triggering unintended side
 effects from injection attacks.
 
-## 2. Legal & ethical use
+{: .tip }
+> See [Security & privacy]({{ '/resources/security-privacy' | relative_url }})
+> for where your code and data go, and the [FAQ]({{ '/resources/faq' | relative_url }})
+> for adoption questions.
 
-Dapper is designed for legitimate security auditing purposes only. Only run
-it against systems you own or have explicit written permission to test.
+## Legal & ethical use
 
-## 3. LLM & automation caveats
+Dapper is designed for **legitimate security auditing purposes only.** Only run
+it against systems you **own or have explicit written permission to test.**
+Running active exploitation against systems you are not authorized to test may
+be illegal in your jurisdiction — authorization is your responsibility, not
+Dapper's.
+
+## LLM & automation caveats
 
 - **Verification is required.** Significant engineering has gone into our
   proof-by-exploitation methodology to eliminate false positives, but the
@@ -43,7 +56,7 @@ it against systems you own or have explicit written permission to test.
   your entire codebase, **Dapper Pro** uses an advanced data flow analysis
   engine for deeper, more thorough coverage.
 
-## 4. Scope of analysis
+## Scope of analysis
 
 **Targeted vulnerabilities.** Dapper Lite specifically targets *exploitable*
 classes:
@@ -54,18 +67,42 @@ classes:
 - Server-Side Request Forgery (SSRF)
 
 **What Dapper Lite does NOT cover.** The proof-by-exploitation model means
-Dapper will not report issues it cannot actively exploit — vulnerable
-third-party libraries, insecure configurations, and similar findings are
-the focus of the advanced analysis engine in **Dapper Pro**.
+Dapper will not report issues it cannot actively exploit. Out of scope for
+Lite:
 
-## 5. Cost & performance
+- Vulnerable third-party libraries and dependencies.
+- Weak or misused cryptography and weak encryption algorithms.
+- Insecure configurations and other static-analysis findings.
+- Business-logic flaws outside the targeted vulnerability classes.
+
+These deeper static-analysis findings are the focus of the advanced data-flow
+analysis engine in **Dapper Pro**. The full mapping of what Lite consistently
+catches against the OWASP WSTG checklist is in
+[Coverage and roadmap](https://github.com/sundi133/dapper/blob/main/COVERAGE.md).
+
+{: .note }
+> Dapper is built on the Claude Agent SDK and is **optimized and primarily
+> tested with Anthropic's Claude models.** The experimental router mode for
+> OpenAI, OpenRouter, and Ollama is unsupported and may produce inconsistent
+> results — see [LLM providers]({{ '/reference/llm-providers' | relative_url }}).
+
+## Cost & performance
 
 - **Time.** A full run typically takes **1 to 1.5 hours**.
-- **Cost.** A full run on Anthropic's Claude 4.5 Sonnet may incur costs of
+- **Cost.** A full run on Anthropic's Claude Sonnet may incur costs of
   approximately **$50 USD**. Costs vary based on model pricing and
-  application complexity.
+  application complexity. Use `PIPELINE_TESTING=true` for a fast, low-cost
+  smoke test.
 
-## 6. License
+## Windows antivirus false positives
+
+Windows Defender may flag files in `xben-benchmark-results/` or
+`deliverables/` as malware. These are **false positives** caused by the real
+exploit code embedded in the reports. Add an exclusion for the Dapper
+directory in Windows Defender, or run Dapper inside WSL2 / Docker. See
+[Troubleshooting]({{ '/resources/troubleshooting' | relative_url }}).
+
+## License
 
 Dapper Lite is released under the
 [GNU Affero General Public License v3.0 (AGPL-3.0)](https://github.com/sundi133/dapper/blob/main/LICENSE).
@@ -78,7 +115,7 @@ AGPL's sharing requirements primarily apply to organizations offering
 Dapper as a public or managed service (a SaaS platform). In those cases,
 any modifications to the core software must be open-sourced.
 
-## 7. Get in touch
+## Get in touch
 
 Interested in **Dapper Pro** — designed for organizations serious about
 application security, with enterprise-grade features, dedicated support,
