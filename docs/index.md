@@ -2,72 +2,80 @@
 title: Home
 layout: home
 nav_order: 1
-description: "Dapper — fully autonomous AI pentester."
+description: "Dapper — autonomous AI pentester. Install, configure, and run it in your environment."
 permalink: /
 ---
 
-# Dapper
+<div class="dapper-hero" markdown="0">
+  <div class="eyebrow">Votal AI</div>
+  <h1>Dapper docs</h1>
+  <p class="lead">Dapper is an autonomous AI pentester. Point it at a running app and its source — it finds vulnerabilities, exploits them to prove they're real, and writes a report. Get it running below.</p>
+</div>
 
-**Dapper is your fully autonomous AI pentester.** Its job is simple: break your
-web app before anyone else does — the Red Team to your vibe-coding Blue Team.
+## Run it in 4 steps
 
-[Quick start →]({{ site.baseurl }}/quickstart){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
-[View on GitHub](https://github.com/sundi133/dapper){: .btn .fs-5 .mb-4 .mb-md-0 }
+You need **Docker** and an **Anthropic API key**. That's it.
 
----
+```bash
+# 1. Get Dapper
+git clone https://github.com/sundi133/dapper.git && cd dapper
 
-## What is Dapper?
+# 2. Add your key
+cp .env.example .env
+echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
 
-Dapper is an AI pentester that delivers actual exploits, not just alerts. It
-autonomously hunts for attack vectors in your code, then uses its built-in
-browser to execute real exploits — injection, auth bypass, SSRF — to prove
-the vulnerability is actually exploitable.
+# 3. Add the source of the app you want to test
+git clone https://github.com/your-org/your-app.git ./repos/your-app
 
-**Why this exists.** Thanks to tools like Claude Code and Cursor, your team
-ships code non-stop. But your penetration test? That happens once a year.
-For the other 364 days, you may be shipping vulnerabilities to production.
-Dapper closes that gap as your on-demand whitebox pentester.
+# 4. Run a pentest (staging/local only — never production)
+./dapper start URL=https://staging.your-app.com REPO=your-app
+```
 
-## Features
+The run goes to the background. Watch it, then read the report:
 
-- **Fully autonomous.** Launch with one command. Handles 2FA/TOTP logins
-  (including Sign in with Google), browser navigation, and the final report
-  with zero intervention.
-- **Pentester-grade reports with reproducible exploits.** Copy-and-paste
-  Proof-of-Concepts, not noisy alerts.
-- **Critical OWASP coverage.** Injection, XSS, SSRF, and Broken Auth/Authz —
-  with more in development.
-- **Code-aware dynamic testing.** Analyzes your source to guide its attack
-  strategy, then performs live browser / CLI exploits on the running app.
-- **Powered by integrated tools.** Nmap, Subfinder, WhatWeb, Schemathesis.
-- **Parallel processing.** Analysis and exploitation across vulnerability
-  classes run concurrently.
+```bash
+./dapper logs                    # live progress
+open http://localhost:8233       # dashboard
+open ./audit-logs/               # report lands here when done
+```
 
-## Editions
+{: .danger }
+> Dapper runs **real exploits** that can change data. Use staging, sandbox, or local targets only — never production.
 
-| Edition | License | Best for |
-|---|---|---|
-| **Dapper Lite** | AGPL-3.0 | Security teams, independent researchers, testing your own apps |
-| **Dapper Pro** | Commercial | Enterprises needing advanced features, CI/CD integration, support |
+[Full quickstart →]({{ '/get-started/quickstart' | relative_url }}){: .btn .btn-primary }
+[Integrate with CI/CD →]({{ '/guides/cicd' | relative_url }}){: .btn }
 
-This site documents **Dapper Lite**. Dapper Pro extends it with an
-LLM-powered data flow analysis engine (inspired by the
-[LLMDFA paper](https://arxiv.org/abs/2402.10754)) for enterprise-grade code
-analysis and deeper detection.
+## Common tasks
 
-{: .warning }
-**White-box only.** Dapper Lite expects access to your application's source
-code and repository layout.
-
-## Where to next
-
-- [Quick start]({{ site.baseurl }}/quickstart) — install and run your first scan
-- [Configuration]({{ site.baseurl }}/configuration) — auth, TOTP, scope rules
-- [Architecture]({{ site.baseurl }}/architecture) — how the multi-agent pipeline works
-- [Sample reports]({{ site.baseurl }}/sample-reports) — what Dapper actually finds
-- [Disclaimers]({{ site.baseurl }}/disclaimers) — what to know before running
-
-{: .tip }
-**Dapper is a fork of [Shannon](https://github.com/KeygraphHQ/shannon)** with
-additional specialized agents, enhanced exploitation capabilities, and
-extended tooling integration.
+<div class="card-grid" markdown="0">
+  <a class="card" href="{{ '/get-started/' | relative_url }}">
+    <div class="card-kicker">Set up</div>
+    <div class="card-title">Install &amp; first run</div>
+    <div class="card-desc">Prerequisites, install, and your first pentest.</div>
+  </a>
+  <a class="card" href="{{ '/guides/authenticated-testing' | relative_url }}">
+    <div class="card-kicker">Configure</div>
+    <div class="card-title">Test behind a login</div>
+    <div class="card-desc">Point Dapper at an app with form, SSO, API, or 2FA/TOTP auth.</div>
+  </a>
+  <a class="card" href="{{ '/guides/cicd' | relative_url }}">
+    <div class="card-kicker">Integrate</div>
+    <div class="card-title">Run it in CI/CD</div>
+    <div class="card-desc">Trigger a scan on every deploy from GitHub Actions, GitLab, or curl.</div>
+  </a>
+  <a class="card" href="{{ '/reference/configuration' | relative_url }}">
+    <div class="card-kicker">Reference</div>
+    <div class="card-title">Config &amp; CLI</div>
+    <div class="card-desc">Every YAML option, CLI flag, and environment variable.</div>
+  </a>
+  <a class="card" href="{{ '/reference/output-deliverables' | relative_url }}">
+    <div class="card-kicker">Output</div>
+    <div class="card-title">Read the results</div>
+    <div class="card-desc">What's in <code>audit-logs/</code>: reports, metrics, and logs.</div>
+  </a>
+  <a class="card" href="{{ '/resources/troubleshooting' | relative_url }}">
+    <div class="card-kicker">Help</div>
+    <div class="card-title">Troubleshooting</div>
+    <div class="card-desc">Docker, Temporal, local targets, and common errors.</div>
+  </a>
+</div>

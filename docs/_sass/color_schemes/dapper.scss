@@ -1,0 +1,37 @@
+// Dapper "clean & technical" dark scheme — red-team accent.
+// Overrides just-the-docs dark scheme variables.
+
+$red-000: #ffe9eb;
+$red-100: #ff9aa3;
+$red-200: #f25e69;
+$red-300: #e23744; // primary accent
+$red-400: #c5202c;
+
+// Core palette
+$body-background-color:      #0d1320;
+$sidebar-color:              #0a0f1a;
+$search-background-color:    #111a2b;
+$body-text-color:           #c3cddb;
+$body-heading-color:        #f4f7fb;
+$nav-child-link-color:      #9fb0c4;
+$link-color:                 $red-300;
+$btn-primary-color:          $red-300;
+$base-button-color:         #16203200;
+
+$border-color:              #1f2a3d;
+$table-background-color:    #111a2b;
+$feedback-color:            darken($sidebar-color, 3%);
+
+// Code
+$code-background-color:     #0b1322;
+$code-linenumber-color:     #5b6b82;
+
+// Accent
+$grey-dk-000: #cdd6e2;
+$grey-dk-100: #aab6c6;
+$grey-dk-200: #8493a6;
+
+// Buttons / labels
+$green-100: #1e9e6a;
+$blue-100:  $red-300;
+$purple-100: $red-300;

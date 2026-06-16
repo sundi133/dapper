@@ -1,0 +1,10 @@
+# Local-preview-only Gemfile (NOT used by GitHub Pages).
+# Ruby 2.6-compatible: uses the just-the-docs GEM (pure Ruby) instead of
+# jekyll-remote-theme (which drags in the openssl native gem). Same theme.
+source "https://rubygems.org"
+
+gem "jekyll", "~> 3.9.3"
+gem "just-the-docs", "0.7.0"
+gem "jekyll-seo-tag"
+gem "kramdown-parser-gfm"
+gem "ffi", "~> 1.15.5"
