@@ -298,9 +298,12 @@ open http://localhost:8233                 # Temporal UI
 # Inspect
 ls -lt audit-logs/ | head                              # recent runs
 cat audit-logs/<id>/session.json | jq '.metrics'       # cost/timing
-ls -lt audit-logs/<id>/deliverables/                   # reports (final: comprehensive_security_assessment_report.md)
 
-# Export findings to CSV/JSON (host-side, needs ANTHROPIC_API_KEY)
+# Reports
+#   Final report is generated automatically by the Reporting phase — no command needed:
+ls -lt audit-logs/*/deliverables/comprehensive_security_assessment_report.md   # open the final report
+ls -lt audit-logs/<id>/deliverables/                   # all deliverables for a run
+# Export findings to CSV/JSON (host-side, needs ANTHROPIC_API_KEY):
 node scripts/export-findings-csv.js <deliverables-dir> [output.csv] [--model <m>] [--max-turns <n>] [--reuse-json]
 
 # Recover
