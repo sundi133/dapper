@@ -175,14 +175,15 @@ exporter (host-side Node, not the container — needs `ANTHROPIC_API_KEY` or
 node scripts/export-findings-csv.js <deliverables-dir> [output.csv] \
      [--model <model>] [--max-turns <n>] [--reuse-json]
 
-# Example (from the README):
-node scripts/export-findings-csv.js repos/DVWA/deliverables --model claude-opus-4-6 --max-turns 100
+# Example — write the CSV to a named reports/ path:
+node scripts/export-findings-csv.js repos/DVWA/deliverables reports/dvwa-findings.csv --model claude-opus-4-8 --max-turns 100
 ```
 
 - Reads every file in the folder with the Claude Agent SDK (no regex/format
   assumptions) and extracts structured findings.
-- Defaults: writes `<deliverables-dir>/findings.csv` plus a companion
-  `<name>_findings.json`. Pass a second positional arg to name the CSV.
+- The second positional arg is the output CSV path. If omitted, it defaults to
+  `<deliverables-dir>/findings.csv`. Either way it also drops a companion
+  `<name>_findings.json` next to the CSV.
 - `--reuse-json` skips re-analysis and rebuilds the CSV from the cached
   `_findings.json` (fast, free — use after a first full run).
 
