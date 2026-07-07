@@ -14,7 +14,7 @@
  */
 
 export type Severity = 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';
-export type Status = 'Exploited' | 'Blocked_by_Security' | 'False_Positive' | 'Out_of_Scope_Internal';
+export type Status = 'Exploited' | 'Blocked_by_Security' | 'Code_Verified' | 'False_Positive' | 'Out_of_Scope_Internal';
 export type Priority = 'Now' | 'Soon' | 'Later';
 export type Confidence = 'High' | 'Medium' | 'Low';
 
@@ -99,7 +99,7 @@ export interface ScopeCoverage {
 export interface ReportModel {
   assessment: Assessment;
   findings: ComputedFinding[]; // all findings
-  reported: ComputedFinding[]; // status Exploited | Blocked_by_Security
+  reported: ComputedFinding[]; // status Exploited | Blocked_by_Security (+ Code_Verified in coverage mode)
   severityCounts: Record<Severity, number>;
   byCategory: CategoryCount[];
   owaspCoverage: OwaspCount[];

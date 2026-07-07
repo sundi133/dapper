@@ -1,0 +1,51 @@
+<jwt_and_credential_crypto_checks>
+JWT and credential cryptography checklist (OWASP A02 Cryptographic Failures + A06 for algorithm handling). Code is ground truth: for every sub-check, land the exact `file:line`, trace source-to-sink, and confirm at runtime against {{WEB_URL}} where possible. Use Task Agent for all source code analysis. Group findings by the six themes below.
+
+[Secret Management]
+- Hardcoded JWT signing secret with insecure fallback (Critical):
+  - Pattern/grep: `JWT_SECRET`, `process.env.JWT_SECRET ||`, `|| 'literal'`, `secret:`, `signingKey`, `jwt.sign(`, `new Jwt`, `SECRET_KEY =`. Flag any `process.env.X || '<string literal>'`, e.g. `process.env.JWT_SECRET || 'airport-ops-lab-secret-2024'`.
+  - Source-to-sink: from the literal/fallback definition → to the `jwt.sign(...)` and `jwt.verify(...)` sites that consume it. A committed default means every deploy that forgets to set the env var signs with a public secret.
+  - Runtime: decode the JWT from the login response (`jwt` payload of the Set-Cookie or JSON body / localStorage). If the committed literal verifies/re-signs a token that {{WEB_URL}} accepts, the fallback is live. Note the secret's length/entropy (short, dictionary-like → also brute-forceable, hashcat mode 16500).
+- Hardcoded secrets committed in environment example file (High):
+  - Pattern/grep: read `.env.example`, `.env.sample`, `.env.template`, `docker-compose*.yml`, `config/*.example`. grep for `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `SMTP_PASS`, `SMTP_PASSWORD`, `GITHUB_TOKEN`, `ghp_`, `DB_PASSWORD`, `DATABASE_URL`, `API_KEY`, `PRIVATE_KEY`, `-----BEGIN`.
+  - Source-to-sink: confirm the value is a REAL credential (non-placeholder: not `changeme`/`xxxx`/`your-key-here`) and trace which module reads that env var (e.g. mailer, S3 client, DB pool). A real committed secret is exposure at rest in git history.
+  - Runtime: where the credential fronts a reachable service (SMTP, S3 bucket, DB behind {{WEB_URL}}), note whether it is externally usable; otherwise report as code-visible exposure.
+
+[Algorithm Handling]
+- JWT verification does not restrict allowed algorithms (Medium, OWASP A06):
+  - Pattern/grep: `jwt.verify(`, `jwtVerify(`, `jsonwebtoken`, `jose`, `verifyJwt`, `decode(`. Read the exact verify site.
+  - Source-to-sink: confirm an explicit allow-list is pinned, e.g. `jwt.verify(token, key, { algorithms: ['HS256'] })`. Missing/empty `algorithms` option, or an algorithm read from the token header, is the defect. `jwt.decode()` used as if it verified is also a defect.
+  - Runtime: decode the JWT header from {{WEB_URL}}. (a) `alg=none`: forge a header `{"alg":"none"}` with empty signature and replay; a 200/authenticated response confirms unsigned tokens are accepted. (b) RS256->HS256 key confusion: if the server verifies RS256 with a public key, re-sign the token as HS256 using that public key bytes as the HMAC secret and replay; acceptance confirms key confusion.
+
+[Token Lifetime & Revocation]
+- Long-lived JWTs with no revocation mechanism (Medium):
+  - Pattern/grep: `expiresIn`, `exp:`, `maxAge`, `jwt.sign(` options. Flag `expiresIn: '30d'` / `'90d'` / `'1y'` / very large second values, or no `exp` at all.
+  - Source-to-sink: from the sign options → confirm there is NO server-side session store, deny-list, `jti` blocklist, or token-version check on the verify path. Inspect the logout handler: if it only clears the client cookie / localStorage and does not invalidate server-side, the token stays valid.
+  - Runtime: decode `exp` from the live token (compute lifetime). Log out, then replay the SAME token against an authenticated endpoint on {{WEB_URL}}; a 200 confirms no revocation (valid-after-logout).
+
+[Token Storage & Transport]
+- JWT / session token stored in browser localStorage or sessionStorage (Medium):
+  - Pattern/grep: `localStorage.setItem`, `sessionStorage.setItem`, `localStorage.getItem`, keys containing `token`, `jwt`, `auth`, `access`, `refresh`, `id_token`, `session`.
+  - Source-to-sink: from the login/refresh handler that writes the credential (file:line) → to the `setItem` call. Confirm the value is a real bearer/JWT/session id, not a benign UI flag.
+  - Runtime: after login on {{WEB_URL}}, read `window.localStorage`/`sessionStorage` via Playwright/JS — any script origin (including an injected XSS payload) can read it, so the token is XSS-exfiltratable. `vulnerable_code_location` MUST be the `setItem` site.
+- Insecure 'remember me' cookie flags (Medium):
+  - Pattern/grep: `res.cookie(`, `Set-Cookie`, `remember`, `rememberMe`, `httpOnly`, `secure`, `sameSite`, `Buffer.from(...).toString('base64')`.
+  - Source-to-sink: from the cookie-set site → confirm the value is signed/encrypted (HMAC/JWT), not merely base64-encoded of a guessable value (userId/email). Confirm flags: missing `HttpOnly`, missing `Secure`, missing/`None` `SameSite`.
+  - Runtime: inspect the `Set-Cookie` header from {{WEB_URL}} for the remember-me cookie; note missing flags. If the value base64-decodes to readable user data, an attacker can forge/tamper it.
+
+[Password Hashing]
+- Passwords hashed with unsalted MD5 / fast unsalted hash (Critical):
+  - Pattern/grep: `md5(`, `sha1(`, `createHash('md5')`, `createHash('sha1')`, `crypto.createHash`, `hashlib.md5`, `MessageDigest.getInstance("MD5")`. Absence of bcrypt/scrypt/argon2 (`bcrypt`, `argon2`, `scrypt`, `pbkdf2`) on the credential path is the tell.
+  - Source-to-sink: from the registration/password-change handler that computes the digest → to the DB write, and from the login handler that recomputes and compares. Confirm no per-user salt is concatenated/stored. Unsalted fast hash → rainbow-table and GPU crackable.
+  - Runtime: not directly observable; this is code-visible. If a hash leaks via another finding, note hashcat mode (0 = MD5, 100 = SHA1).
+
+[Reset-Token Flows]
+- Predictable password reset token generation (High):
+  - Pattern/grep: `Date.now()`, `Math.random()`, `crypto.randomBytes` (confirm sufficient length if present), `uuidv1`, sequential counters, `Buffer.from(email).toString('base64')`, `token = user.id`. Flag any reset/verify token NOT from a CSPRNG (`crypto.randomBytes(32+)`, `crypto.randomUUID`, `secrets.token_urlsafe`).
+  - Source-to-sink: from the forgot-password handler that generates the token → to where it is stored/emailed and to the reset-consume handler that validates it. A `Date.now()`/`Math.random()`/base64-of-email token is guessable/forgeable.
+  - Runtime: trigger forgot-password for a controlled account on {{WEB_URL}}; inspect the generated token's structure (length, charset, monotonicity across two requests) to confirm predictability.
+- Password reset token returned directly in the API/JSON response (High):
+  - Pattern/grep: forgot-password / reset controller returning `token`, `resetToken`, `res.json({ token })`, `return { resetLink }`. The token must be delivered out-of-band (email/SMS), never in the HTTP response to the requester.
+  - Source-to-sink: from the token generation → to the response body of `POST /forgot-password` (or equivalent). Any inclusion in the response is the defect.
+  - Runtime: call the forgot-password endpoint on {{WEB_URL}} for any account and inspect the JSON/HTML response; a reset token/link present in-band lets an attacker reset an arbitrary account's password.
+</jwt_and_credential_crypto_checks>

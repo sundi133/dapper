@@ -61,10 +61,16 @@ function postureStatement(m: ReportModel): string {
         ? '#a16207'
         : '#0369a1';
   const c = m.severityCounts;
+  const exploited = m.reported.filter((f) => f.status === 'Exploited' || f.status === 'Blocked_by_Security').length;
+  const codeVerified = m.reported.filter((f) => f.status === 'Code_Verified').length;
+  const breakdown =
+    codeVerified > 0
+      ? ` (${exploited} runtime-exploited, ${codeVerified} confirmed in source but not runtime-exploited)`
+      : '';
   const headline =
     total(m) === 0
       ? 'No exploitable vulnerabilities were confirmed within the tested scope.'
-      : `The assessment identified <b>${c.Critical} critical</b> and <b>${c.High} high</b> severity findings across ${m.byCategory.length} categories. Prioritized remediation is advised before the next release.`;
+      : `The assessment identified <b>${c.Critical} critical</b> and <b>${c.High} high</b> severity findings across ${m.byCategory.length} categories${breakdown}. Prioritized remediation is advised before the next release.`;
   return `<div class="posture"><span class="grade" style="background:${color}">${escapeHtml(grade)}</span> ${headline}</div>`;
 }
 

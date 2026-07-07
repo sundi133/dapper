@@ -6,7 +6,8 @@
 
 /**
  * Render the findings CSV — one row per reported finding (Exploited /
- * Blocked_by_Security; the model already filters these into `reported`).
+ * Blocked_by_Security, plus Code_Verified in coverage mode; the model already
+ * filters these into `reported`).
  * RFC-4180 quoting.
  */
 

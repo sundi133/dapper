@@ -14,10 +14,11 @@ Shannon currently targets the following classes of *exploitable* vulnerabilities
 - Command Injection
 - Cross-Site Scripting (XSS)
 - Server-Side Request Forgery (SSRF)
+- Cryptographic Failures (JWT security: hardcoded/weak signing secrets, algorithm confusion, token lifetime & storage; weak password hashing; insecure reset-token & remember-me flows)
 
 ## What Shannon Does Not Cover
 
-This list is not exhaustive of all potential security risks. Shannon does not, for example, report on issues that it cannot actively exploit, such as the use of vulnerable third-party libraries, weak encryption algorithms, or insecure configurations. These types of static-analysis findings are the focus of our upcoming **Keygraph Code Security (SAST)** product.
+This list is not exhaustive of all potential security risks. Shannon does not, for example, report on library-version / dependency (SCA) static findings, such as flagging a vulnerable third-party library purely by its declared version, or purely configuration-level hardening gaps that cannot be demonstrated against the target. These version-based static-analysis findings are the focus of our upcoming **Keygraph Code Security (SAST)** product. Note that concrete, code-visible cryptographic failures — weak password hashing, hardcoded/weak JWT signing secrets, JWT algorithm confusion, and insecure reset-token / remember-me handling — ARE now covered by our Cryptographic Failures analysis above.
 
 ## WST Testing Checklist
 
@@ -63,7 +64,7 @@ This list is not exhaustive of all potential security risks. Shannon does not, f
 | WSTG-ATHN-02 | Testing for Default Credentials | ✅ |
 | WSTG-ATHN-03 | Testing for Weak Lock Out Mechanism | ✅ |
 | WSTG-ATHN-04 | Testing for Bypassing Authentication Schema | ✅ |
-| WSTG-ATHN-05 | Testing for Vulnerable Remember Password |  |
+| WSTG-ATHN-05 | Testing for Vulnerable Remember Password | ✅ |
 | WSTG-ATHN-06 | Testing for Browser Cache Weakness |  |
 | WSTG-ATHN-07 | Testing for Weak Password Policy | ✅ |
 | WSTG-ATHN-08 | Testing for Weak Security Question Answer | ✅ |
@@ -121,7 +122,7 @@ This list is not exhaustive of all potential security risks. Shannon does not, f
 | WSTG-CRYP-01 | Testing for Weak Transport Layer Security | ✅ |
 | WSTG-CRYP-02 | Testing for Padding Oracle |  |
 | WSTG-CRYP-03 | Testing for Sensitive Information Sent Via Unencrypted Channels | ✅ |
-| WSTG-CRYP-04 | Testing for Weak Encryption |  |
+| WSTG-CRYP-04 | Testing for Weak Encryption | ✅ |
 |  |  |  |
 | **WSTG-BUSLOGIC** | **Business Logic Testing** |  |
 | WSTG-BUSL-01 | Test Business Logic Data Validation |  |
