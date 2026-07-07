@@ -136,9 +136,10 @@ You have a limited turn budget. DO NOT waste turns reading one file at a time.
    - exploitation_hypothesis: How an attacker would exploit this
    - confidence: Confidence level of the finding
    - externally_exploitable: Whether externally exploitable (true/false/unknown)
-   - cwe: Compact CWE summary, e.g. "CWE-89: SQL Injection" or "CWE-639: IDOR; CWE-862: Missing Authorization"
-   - cwe_names: CWE short name(s) matching cwe_ids
-   - remediation_suggestions: Actionable remediation guidance for engineers. If remediation is unavailable, synthesize concrete suggestions.
+   - cwe: REQUIRED. The most specific CWE(s) for this finding, as a compact summary, e.g. "CWE-89: SQL Injection" or "CWE-639: IDOR; CWE-862: Missing Authorization". YOU are the authority on this mapping — infer it from the vulnerability type, root cause, and evidence. Never leave this blank.
+   - cwe_names: CWE short name(s) matching the cwe id(s) above.
+   - owasp: REQUIRED. The best-fit OWASP Top 10 (2021) category, e.g. "A02:2021 Cryptographic Failures", "A01:2021 Broken Access Control", "A03:2021 Injection", "A07:2021 Identification and Authentication Failures". Choose the single best category.
+   - remediation_suggestions: REQUIRED. Actionable, finding-specific remediation guidance for engineers, grounded in this vulnerability's root cause. Always provide concrete guidance — never leave blank.
    - evidence_snippet: Key evidence text (max 300 chars)
    - exploit_result: What happened when exploited
    - affected_endpoint: Specific affected endpoint
@@ -196,7 +197,7 @@ You have a limited turn budget. DO NOT waste turns reading one file at a time.
 - BE EFFICIENT. Batch file reads using bash. Do not read one file per turn.
 - Merge information: if the same finding ID appears in multiple files, combine all fields into one record.
 - Do NOT invent data. If a field is not present, use empty string "".
-- When a CWE is reasonably inferable from the vulnerability type, exploit path, or missing defense, populate cwe_ids and cwe_names.
+- CWE and OWASP mapping is REQUIRED and is YOUR responsibility as the analyst: assign the most specific CWE(s) and the single best-fit OWASP Top 10 (2021) category to EVERY finding, based on its type, root cause, and evidence. Do not leave cwe or owasp blank. Do not rely on any downstream keyword table — this mapping comes from your judgment.
 - The developer_verification_steps field is REQUIRED for every finding. Generate it based on available context.
 - CRQ fields (likelihood, impact_level, risk_score, business_impact, data_at_risk, compliance_impact) are REQUIRED for every finding. Assess these based on the vulnerability evidence, severity, and exploitation status.
 - Attack chain analysis is REQUIRED: look across ALL findings to identify multi-step attack paths. Assign matching attack_chain_id values to findings that chain together. A single assessment typically has 2-5 attack chains.
@@ -458,232 +459,7 @@ const loadFindings = () => {
   return null;
 };
 
-const CWE_RULES = [
-  {
-    id: 'CWE-89',
-    name: 'Improper Neutralization of Special Elements used in an SQL Command',
-    patterns: ['sql_injection', 'sql injection', 'union select', 'sqlite', 'database error'],
-    remediation:
-      'Use parameterized queries or ORM-bound parameters for all database access. Reject or safely encode attacker-controlled input before it reaches SQL construction.',
-    risk: { likelihood: 'likely', impact: 'critical', business: 'Database extraction, data breach, authentication bypass', compliance: 'PCI-DSS Req 6.5.1; OWASP A03:2021' },
-  },
-  {
-    id: 'CWE-79',
-    name: 'Improper Neutralization of Input During Web Page Generation',
-    patterns: ['xss', 'cross-site scripting', 'cross site scripting', 'script injection'],
-    remediation:
-      'Apply context-aware output encoding, validate and sanitize untrusted input, and enforce a restrictive Content-Security-Policy to reduce script injection impact.',
-    risk: { likelihood: 'likely', impact: 'high', business: 'Session hijacking, credential theft, defacement', compliance: 'PCI-DSS Req 6.5.7; OWASP A03:2021' },
-  },
-  {
-    id: 'CWE-918',
-    name: 'Server-Side Request Forgery (SSRF)',
-    patterns: ['ssrf', 'server-side request forgery', 'server side request forgery'],
-    remediation:
-      'Strictly validate outbound destinations against an allowlist, block internal address ranges and metadata endpoints, and route outbound requests through a hardened proxy.',
-    risk: { likelihood: 'possible', impact: 'critical', business: 'Internal network access, cloud metadata exposure, data exfiltration', compliance: 'OWASP A10:2021; SOC2 CC6.6' },
-  },
-  {
-    id: 'CWE-639',
-    name: 'Authorization Bypass Through User-Controlled Key',
-    patterns: ['bola', 'idor', 'book_title', 'username (path parameter)', 'broken object level authorization'],
-    remediation:
-      'Authorize access using the authenticated user context on every object lookup. Never trust path, query, or body identifiers alone to decide ownership.',
-    risk: { likelihood: 'likely', impact: 'high', business: 'Unauthorized data access, cross-user data leakage', compliance: 'GDPR Art. 32; OWASP A01:2021' },
-  },
-  {
-    id: 'CWE-862',
-    name: 'Missing Authorization',
-    patterns: ['missing authorization', 'no ownership verification', 'authorization not checked', 'admin-only', 'privilege escalation'],
-    remediation:
-      'Add explicit authorization checks server-side for each privileged action and deny requests that are not permitted for the authenticated principal.',
-    risk: { likelihood: 'likely', impact: 'critical', business: 'Privilege escalation, unauthorized administrative actions', compliance: 'SOC2 CC6.1; OWASP A01:2021' },
-  },
-  {
-    id: 'CWE-287',
-    name: 'Improper Authentication',
-    patterns: ['authentication_bypass', 'auth bypass', 'improper authentication', 'forged token'],
-    remediation:
-      'Require robust authentication for protected operations, validate tokens securely, and reject forged or malformed credentials before business logic executes.',
-    risk: { likelihood: 'likely', impact: 'critical', business: 'Complete authentication bypass, account takeover', compliance: 'PCI-DSS Req 8; OWASP A07:2021; SOC2 CC6.1' },
-  },
-  {
-    id: 'CWE-321',
-    name: 'Use of Hard-coded Cryptographic Key',
-    patterns: ['hardcoded secret', 'hardcoded secret_key', 'hardcoded cryptographic', 'jwt secret key hardcoded', 'secret key hardcoded'],
-    remediation:
-      'Remove hard-coded cryptographic material from source control. Load high-entropy secrets from a secure secret manager or environment and support rotation.',
-    risk: { likelihood: 'possible', impact: 'critical', business: 'Token forgery, cryptographic bypass, persistent compromise', compliance: 'PCI-DSS Req 3.5; OWASP A02:2021' },
-  },
-  {
-    id: 'CWE-798',
-    name: 'Use of Hard-coded Credentials',
-    patterns: ['default_credentials', 'default credentials', 'hardcoded credentials', 'admin:pass1'],
-    remediation:
-      'Eliminate default or embedded credentials. Generate unique bootstrap credentials per environment and require immediate rotation on first use.',
-    risk: { likelihood: 'almost_certain', impact: 'critical', business: 'Trivial unauthorized access via known credentials', compliance: 'PCI-DSS Req 2.1; OWASP A07:2021' },
-  },
-  {
-    id: 'CWE-256',
-    name: 'Plaintext Storage of a Password',
-    patterns: ['plaintext_password_storage', 'plaintext passwords', 'password hashing', 'stored as plaintext'],
-    remediation:
-      'Hash passwords with a modern password hashing algorithm such as Argon2id or bcrypt, add per-password salt, and avoid storing recoverable plaintext passwords.',
-    risk: { likelihood: 'possible', impact: 'critical', business: 'Mass credential compromise if database is breached', compliance: 'GDPR Art. 32; PCI-DSS Req 8.2.1; OWASP A02:2021' },
-  },
-  {
-    id: 'CWE-306',
-    name: 'Missing Authentication for Critical Function',
-    patterns: ['unauthenticated_destructive_operation', 'no authentication required', 'without any authentication', 'createdb'],
-    remediation:
-      'Require strong authentication before invoking administrative or destructive actions, and remove development-only maintenance endpoints from production.',
-    risk: { likelihood: 'likely', impact: 'critical', business: 'Unauthenticated access to destructive or administrative operations', compliance: 'OWASP A07:2021; SOC2 CC6.1' },
-  },
-  {
-    id: 'CWE-915',
-    name: 'Improperly Controlled Modification of Dynamically-Determined Object Attributes',
-    patterns: ['mass_assignment', 'mass assignment', 'admin:true', 'improperly controlled modification'],
-    remediation:
-      'Use an explicit allowlist of writable fields for object creation and update operations. Ignore or reject privilege-bearing fields supplied by clients.',
-    risk: { likelihood: 'possible', impact: 'high', business: 'Privilege escalation via parameter manipulation', compliance: 'OWASP A04:2021' },
-  },
-  {
-    id: 'CWE-489',
-    name: 'Active Debug Code',
-    patterns: ['debug_mode_enabled', 'debug mode', 'werkzeug debugger', 'debug_endpoint'],
-    remediation:
-      'Disable debug tooling and developer-only endpoints in production builds. Gate any diagnostics behind secure environment checks and authentication.',
-    risk: { likelihood: 'possible', impact: 'high', business: 'Remote code execution, internal information disclosure', compliance: 'OWASP A05:2021' },
-  },
-  {
-    id: 'CWE-209',
-    name: 'Generation of Error Message Containing Sensitive Information',
-    patterns: ['verbose_error_messages', 'stack trace', 'schema_disclosure', 'debug_mode_stack_traces', 'validation errors', 'authentication_error_disclosure'],
-    remediation:
-      'Return generic client-facing errors and log detailed diagnostic context server-side only. Avoid exposing stack traces, schema details, and framework internals.',
-    risk: { likelihood: 'likely', impact: 'low', business: 'Information leakage aiding targeted attacks', compliance: 'OWASP A05:2021' },
-  },
-  {
-    id: 'CWE-703',
-    name: 'Improper Check or Handling of Exceptional Conditions',
-    patterns: ['missing_exception_handling', 'bare_except_block', 'bare except', 'try/except'],
-    remediation:
-      'Handle expected exceptions explicitly, fail closed on unexpected errors, and return correct HTTP status codes while preserving server-side logs for debugging.',
-    risk: { likelihood: 'possible', impact: 'moderate', business: 'Unexpected application behavior, potential security bypass', compliance: 'OWASP A05:2021' },
-  },
-  {
-    id: 'CWE-307',
-    name: 'Improper Restriction of Excessive Authentication Attempts',
-    patterns: ['missing_rate_limiting', 'brute force', 'rate limiting', 'credential stuffing'],
-    remediation:
-      'Apply rate limiting, lockout or progressive backoff controls on authentication and other abuse-prone endpoints, and alert on repeated failures.',
-    risk: { likelihood: 'likely', impact: 'high', business: 'Brute force credential compromise, account takeover at scale', compliance: 'PCI-DSS Req 8.1.6; OWASP A07:2021' },
-  },
-  {
-    id: 'CWE-799',
-    name: 'Improper Control of Interaction Frequency',
-    patterns: ['missing_rate_limiting_registration', 'unlimited', 'registration'],
-    remediation:
-      'Limit request rates for registration and other public workflows, add abuse detection, and require additional verification for suspicious activity.',
-    risk: { likelihood: 'possible', impact: 'moderate', business: 'Abuse of registration, spam accounts, resource exhaustion', compliance: 'OWASP A04:2021' },
-  },
-  {
-    id: 'CWE-613',
-    name: 'Insufficient Session Expiration',
-    patterns: ['missing_token_revocation', 'no_logout', 'unlimited_concurrent_sessions', 'missing_token_binding', 'token revocation', 'concurrent sessions'],
-    remediation:
-      'Track active sessions server-side, revoke tokens on logout or sensitive account changes, enforce session lifetimes, and limit concurrent active sessions.',
-    risk: { likelihood: 'possible', impact: 'high', business: 'Persistent unauthorized access via stolen or stale tokens', compliance: 'OWASP A07:2021; SOC2 CC6.1' },
-  },
-  {
-    id: 'CWE-294',
-    name: 'Authentication Bypass by Capture-replay',
-    patterns: ['token_replay', 'token replay'],
-    remediation:
-      'Bind tokens to strong session context where appropriate, shorten token lifetime, rotate refresh tokens, and detect replay of previously seen credentials.',
-    risk: { likelihood: 'unlikely', impact: 'high', business: 'Session hijacking via replayed credentials', compliance: 'OWASP A07:2021' },
-  },
-  {
-    id: 'CWE-525',
-    name: 'Information Exposure Through Browser Caching',
-    patterns: ['missing_cache_control_headers', 'cache-control', 'cache control'],
-    remediation:
-      'Set Cache-Control: no-store for sensitive responses and ensure downstream proxies and browsers do not persist authenticated content.',
-    risk: { likelihood: 'unlikely', impact: 'low', business: 'Sensitive data cached on shared devices', compliance: 'OWASP A05:2021' },
-  },
-  {
-    id: 'CWE-208',
-    name: 'Observable Timing Discrepancy',
-    patterns: ['timing_attack', 'timing attack', 'timing discrepancy'],
-    remediation:
-      'Use constant-time comparisons for sensitive values and make authentication failure paths perform equivalent work to reduce timing side channels.',
-    risk: { likelihood: 'rare', impact: 'moderate', business: 'Credential enumeration via timing side-channel', compliance: 'OWASP A02:2021' },
-  },
-  {
-    id: 'CWE-367',
-    name: 'Time-of-check Time-of-use (TOCTOU) Race Condition',
-    patterns: ['race_condition_toctou', 'race condition', 'toctou'],
-    remediation:
-      'Make state validation and mutation atomic using transactions, row-level locking, or idempotency controls so concurrent requests cannot bypass invariants.',
-    risk: { likelihood: 'unlikely', impact: 'high', business: 'Business logic bypass, double-spend, inventory manipulation', compliance: 'OWASP A04:2021' },
-  },
-  {
-    id: 'CWE-1021',
-    name: 'Improper Restriction of Rendered UI Layers or Frames',
-    patterns: ['clickjacking', 'frame-options', 'x-frame-options'],
-    remediation:
-      'Set X-Frame-Options or frame-ancestors in CSP and ensure sensitive pages cannot be embedded by untrusted origins.',
-    risk: { likelihood: 'unlikely', impact: 'moderate', business: 'UI redress attacks tricking users into unintended actions', compliance: 'OWASP A05:2021' },
-  },
-  {
-    id: 'CWE-319',
-    name: 'Cleartext Transmission of Sensitive Information',
-    patterns: ['weak_tls', 'missing_application_tls', 'insecure_token_delivery', 'http-only', 'unencrypted channel'],
-    remediation:
-      'Enforce TLS end to end for all sensitive traffic, redirect HTTP to HTTPS, and avoid transmitting secrets or tokens over cleartext channels.',
-    risk: { likelihood: 'possible', impact: 'high', business: 'Credential interception, man-in-the-middle attacks', compliance: 'PCI-DSS Req 4.1; GDPR Art. 32; OWASP A02:2021' },
-  },
-  {
-    id: 'CWE-312',
-    name: 'Cleartext Storage of Sensitive Information',
-    patterns: ['unencrypted_database_storage', 'encryption at rest', 'plaintext file', 'database.db'],
-    remediation:
-      'Encrypt sensitive data at rest, protect encryption keys separately from the data store, and minimize direct filesystem exposure to stored secrets.',
-    risk: { likelihood: 'possible', impact: 'critical', business: 'Bulk data exposure if storage is compromised', compliance: 'GDPR Art. 32; PCI-DSS Req 3.4; HIPAA 164.312(a)(2)(iv)' },
-  },
-  {
-    id: 'CWE-200',
-    name: 'Exposure of Sensitive Information to an Unauthorized Actor',
-    patterns: ['information_disclosure', 'sensitive_data_exposure', 'user_enumeration', 'api_spec_exposure', 'header_leakage', 'security_posture_leak'],
-    remediation:
-      'Limit sensitive data returned to unauthenticated or unauthorized users, remove unnecessary disclosure endpoints, and minimize metadata leaked in responses.',
-    risk: { likelihood: 'likely', impact: 'moderate', business: 'Information leakage enabling targeted attacks', compliance: 'GDPR Art. 5(1)(f); OWASP A01:2021' },
-  },
-  {
-    id: 'CWE-204',
-    name: 'Observable Response Discrepancy',
-    patterns: ['username_enumeration', 'authentication_error_disclosure', 'different error messages'],
-    remediation:
-      'Normalize authentication and validation error messages so success and failure cases do not disclose whether usernames, emails, or resources exist.',
-    risk: { likelihood: 'likely', impact: 'low', business: 'User enumeration aiding credential attacks', compliance: 'OWASP A07:2021' },
-  },
-  {
-    id: 'CWE-650',
-    name: 'Trusting HTTP Permission Methods on the Server Side',
-    patterns: ['http_verb_tampering', 'method override', 'x-http-method-override'],
-    remediation:
-      'Reject method-override headers unless explicitly required, and enforce authorization and routing based on the effective HTTP method server-side.',
-    risk: { likelihood: 'unlikely', impact: 'high', business: 'Authorization bypass via HTTP method manipulation', compliance: 'OWASP A01:2021' },
-  },
-];
 
-const collapseText = (...parts) =>
-  parts
-    .flat()
-    .filter(Boolean)
-    .map((part) => (Array.isArray(part) ? part.join(' ') : String(part)))
-    .join(' ')
-    .toLowerCase();
 
 const hasValue = (value) =>
   value !== null &&
@@ -691,33 +467,13 @@ const hasValue = (value) =>
   !(typeof value === 'string' && value.trim() === '') &&
   !(Array.isArray(value) && value.length === 0);
 
-const inferCweMappings = (finding) => {
-  const text = collapseText(
-    finding.type,
-    finding.missing_defense,
-    finding.attack_path,
-    finding.exploitation_hypothesis,
-    finding.notes,
-    finding.report_section,
-    finding.source_endpoint,
-    finding.parameter
-  );
 
-  return CWE_RULES.filter((rule) =>
-    rule.patterns.some((pattern) => text.includes(pattern.toLowerCase()))
-  );
-};
-
-const buildRemediation = (finding, mappings) => {
+// Remediation is LLM-authored. Prefer the model's remediation/remediation_suggestions;
+// only fall back to a generic prompt when the model left both blank.
+const buildRemediation = (finding) => {
   if (hasValue(finding.remediation)) {
     return String(finding.remediation).trim();
   }
-
-  const snippets = [...new Set(mappings.map((mapping) => mapping.remediation).filter(Boolean))];
-  if (snippets.length > 0) {
-    return snippets.slice(0, 3).join(' ');
-  }
-
   return 'Review the affected endpoint and code path, add missing authorization and validation checks, remove unsafe debug or disclosure behavior, and verify the fix with a targeted regression test.';
 };
 
@@ -736,27 +492,24 @@ const IMPACT_MAP = { critical: 5, high: 4, moderate: 3, low: 2, informational: 1
 const SEVERITY_TO_IMPACT = { critical: 'critical', high: 'high', medium: 'moderate', low: 'low', info: 'informational' };
 const STATUS_LIKELIHOOD_BOOST = { exploited: 'almost_certain', blocked: 'unlikely', potential: 'possible', false_positive: 'rare' };
 
-const inferCrqFields = (finding, mappings) => {
+// Risk quantification. Business impact / compliance / data-at-risk are LLM-authored and
+// passed through verbatim; only the numeric likelihood/impact/score fall back to generic
+// (non-CWE) math so the risk matrix still renders when the model omits a field.
+const inferCrqFields = (finding) => {
   const severity = (finding.severity || '').toLowerCase();
   const status = (finding.status || '').toLowerCase();
 
-  // Likelihood: agent value > status-based > CWE rule default > severity fallback
+  // Likelihood: agent value > status-based > severity fallback
   let likelihood = hasValue(finding.likelihood) ? finding.likelihood : '';
   if (!likelihood && STATUS_LIKELIHOOD_BOOST[status]) {
     likelihood = STATUS_LIKELIHOOD_BOOST[status];
-  }
-  if (!likelihood && mappings.length > 0 && mappings[0].risk) {
-    likelihood = mappings[0].risk.likelihood;
   }
   if (!likelihood) {
     likelihood = severity === 'critical' ? 'likely' : severity === 'high' ? 'possible' : severity === 'medium' ? 'possible' : 'unlikely';
   }
 
-  // Impact: agent value > CWE rule default > severity mapping
+  // Impact: agent value > severity mapping
   let impact_level = hasValue(finding.impact_level) ? finding.impact_level : '';
-  if (!impact_level && mappings.length > 0 && mappings[0].risk) {
-    impact_level = mappings[0].risk.impact;
-  }
   if (!impact_level) {
     impact_level = SEVERITY_TO_IMPACT[severity] || 'moderate';
   }
@@ -770,19 +523,9 @@ const inferCrqFields = (finding, mappings) => {
     risk_score = Math.max(1, Math.min(10, risk_score));
   }
 
-  // Business impact: agent value > CWE rule default
-  let business_impact = hasValue(finding.business_impact) ? String(finding.business_impact) : '';
-  if (!business_impact && mappings.length > 0 && mappings[0].risk) {
-    business_impact = mappings[0].risk.business;
-  }
-
-  // Compliance: agent value > CWE rule default
-  let compliance_impact = hasValue(finding.compliance_impact) ? String(finding.compliance_impact) : '';
-  if (!compliance_impact && mappings.length > 0 && mappings[0].risk) {
-    compliance_impact = mappings[0].risk.compliance;
-  }
-
-  // Data at risk: keep agent value
+  // Business impact / compliance / data-at-risk: LLM-authored only (no hardcoded defaults)
+  const business_impact = hasValue(finding.business_impact) ? String(finding.business_impact) : '';
+  const compliance_impact = hasValue(finding.compliance_impact) ? String(finding.compliance_impact) : '';
   const data_at_risk = hasValue(finding.data_at_risk) ? String(finding.data_at_risk) : '';
 
   // Estimated annual occurrence: keep agent value or infer
@@ -797,7 +540,8 @@ const inferCrqFields = (finding, mappings) => {
 
 const enrichFindings = (findings) => findings.map((finding) => {
   const { remediation: _ignoredRemediation, cwe_ids: _ignoredCweIds, ...rest } = finding;
-  const mappings = inferCweMappings(finding);
+
+  // CWE / OWASP mapping is LLM-authored — use exactly what the model produced, no inference.
   const existingIds = hasValue(finding.cwe_ids)
     ? String(finding.cwe_ids).split(/[;,]/).map((part) => part.trim()).filter(Boolean)
     : [];
@@ -805,22 +549,21 @@ const enrichFindings = (findings) => findings.map((finding) => {
     ? String(finding.cwe_names).split(/[;,]/).map((part) => part.trim()).filter(Boolean)
     : [];
 
-  const cweIds = existingIds.length > 0
-    ? existingIds
-    : mappings.map((mapping) => mapping.id);
-  const cweNames = existingNames.length > 0
-    ? existingNames
-    : mappings.map((mapping) => mapping.name);
-  const remediation = buildRemediation(finding, mappings);
-  const compactCwe = [...new Set(
-    cweIds.map((id, index) => {
-      const name = cweNames[index] || '';
-      return name ? `${id}: ${name}` : id;
-    })
-  )].join('; ');
+  // Prefer a compact "cwe" string from the model; otherwise assemble it from id/name pairs.
+  let compactCwe = hasValue(finding.cwe) ? String(finding.cwe).trim() : '';
+  if (!compactCwe && existingIds.length > 0) {
+    compactCwe = [...new Set(
+      existingIds.map((id, index) => {
+        const name = existingNames[index] || '';
+        return name ? `${id}: ${name}` : id;
+      })
+    )].join('; ');
+  }
+  const cweNames = existingNames;
+  const remediation = buildRemediation(finding);
 
   // CRQ enrichment
-  const crq = inferCrqFields(finding, mappings);
+  const crq = inferCrqFields(finding);
 
   // Attack chain fields: pass through agent values
   const attack_chain_id = hasValue(finding.attack_chain_id) ? String(finding.attack_chain_id) : '';
@@ -834,6 +577,7 @@ const enrichFindings = (findings) => findings.map((finding) => {
     original_ids: normalizeMultiValueField(finding.original_ids),
     cwe: compactCwe,
     cwe_names: [...new Set(cweNames)].join('; '),
+    owasp: hasValue(finding.owasp) ? String(finding.owasp).trim() : '',
     remediation_suggestions: hasValue(finding.remediation_suggestions)
       ? String(finding.remediation_suggestions).trim()
       : remediation,
@@ -1034,6 +778,7 @@ const generateDeveloperReport = (findings) => {
     if (f.parameter) lines.push(`- **Parameter:** \`${f.parameter}\``);
     if (f.code_location) lines.push(`- **Code Location:** \`${f.code_location}\``);
     if (f.cwe) lines.push(`- **CWE:** ${f.cwe}`);
+    if (f.owasp) lines.push(`- **OWASP:** ${f.owasp}`);
     if (f.missing_defense) lines.push(`- **Missing Defense:** ${f.missing_defense}`);
     lines.push('');
 
@@ -1405,6 +1150,7 @@ const CSV_COLUMNS = [
   { header: 'Likelihood', get: (f) => humanize(f.likelihood) },
   { header: 'Impact', get: (f) => humanize(f.impact_level) },
   { header: 'CWE', get: (f) => f.cwe },
+  { header: 'OWASP', get: (f) => f.owasp },
   { header: 'Endpoint', get: (f) => getEndpoint(f) },
   { header: 'Parameter', get: (f) => f.parameter },
   { header: 'Code Location', get: (f) => f.code_location },
