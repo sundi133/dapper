@@ -43,10 +43,16 @@ function header(m: ReportModel): string {
 function execBrief(m: ReportModel): string {
   const c = m.severityCounts;
   const out = ['## Executive Brief', ''];
+  const exploited = m.reported.filter((f) => f.status === 'Exploited' || f.status === 'Blocked_by_Security').length;
+  const codeVerified = m.reported.filter((f) => f.status === 'Code_Verified').length;
+  const breakdown =
+    codeVerified > 0
+      ? ` (${exploited} runtime-exploited, ${codeVerified} confirmed in source but not runtime-exploited)`
+      : '';
   out.push(
     m.reported.length === 0
       ? `**Posture: ${m.postureGrade}.** No exploitable vulnerabilities were confirmed within the tested scope.`
-      : `**Posture: ${m.postureGrade}.** The assessment identified **${c.Critical} critical** and **${c.High} high** severity findings across ${m.byCategory.length} categories.`
+      : `**Posture: ${m.postureGrade}.** The assessment identified **${c.Critical} critical** and **${c.High} high** severity findings across ${m.byCategory.length} categories${breakdown}.`
   );
   out.push('', '### Severity Distribution', '', '| Severity | Count |', '| --- | --- |');
   for (const s of SEVERITY_ORDER) out.push(`| ${s} | ${c[s]} |`);

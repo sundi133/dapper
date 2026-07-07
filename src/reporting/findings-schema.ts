@@ -18,7 +18,7 @@ import type {
 } from './types.js';
 
 const SEVERITIES: Severity[] = ['Critical', 'High', 'Medium', 'Low', 'Informational'];
-const STATUSES: Status[] = ['Exploited', 'Blocked_by_Security', 'False_Positive', 'Out_of_Scope_Internal'];
+const STATUSES: Status[] = ['Exploited', 'Blocked_by_Security', 'Code_Verified', 'False_Positive', 'Out_of_Scope_Internal'];
 const PRIORITIES: Priority[] = ['Now', 'Soon', 'Later'];
 const CONFIDENCES: Confidence[] = ['High', 'Medium', 'Low'];
 

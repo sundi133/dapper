@@ -28,6 +28,14 @@ Identify and document exploitable, internet-reachable client-side vulnerabilitie
 - No exploit, no report.
 </critical>
 
+<browser_storage_checks>
+For the Browser_Storage class, prioritize sensitive tokens persisted in web storage:
+- grep for localStorage.setItem / localStorage.getItem / sessionStorage.setItem / sessionStorage.getItem and inspect keys containing token, jwt, auth, access, session, refresh, id_token.
+- Confirm the stored value is a real session credential (JWT/bearer/session id), not a benign UI flag, and trace source-to-sink from the login/refresh handler that writes it (file:line) to the storage write.
+- Confirm XSS-readability: any script origin (including an injected XSS payload) can read window.localStorage/sessionStorage, so a stored token is exfiltratable; vulnerable_code_location MUST be the setItem site (file:line). Use vulnerability_type "Browser_Storage".
+- Ownership boundary: this token-in-web-storage class is co-owned with and primarily reported by the crypto agent (crypto-vuln). Only surface it here when confirming distinct client-side exploitability (e.g. chained with an XSS sink you found); otherwise defer to crypto-vuln to avoid duplicate reports.
+</browser_storage_checks>
+
 <starting_context>
 - Primary inputs: deliverables/recon_deliverable.md and deliverables/pre_recon_deliverable.md
 </starting_context>

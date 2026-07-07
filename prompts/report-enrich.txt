@@ -19,6 +19,7 @@ Read these (any that exist) in `deliverables/`:
 - Context: `threat_model_deliverable.md`, `code_analysis_deliverable.md`, `pre_recon_deliverable.md`, `recon_deliverable.md`
 - Exploitation evidence (one per category): `injection_exploitation_evidence.md`, `xss_exploitation_evidence.md`, `auth_exploitation_evidence.md`, `ssrf_exploitation_evidence.md`, `authz_exploitation_evidence.md`, `web_attacks_exploitation_evidence.md`, `session_auth_exploitation_evidence.md`, `business_logic_exploitation_evidence.md`, `client_side_exploitation_evidence.md`, `info_gathering_exploitation_evidence.md`, `config_deploy_exploitation_evidence.md`, `session_mgmt_exploitation_evidence.md`, `error_handling_exploitation_evidence.md`, `crypto_exploitation_evidence.md`, `api_testing_exploitation_evidence.md`
 - Structured queues (vulnerability metadata): any `*_exploitation_queue.json`
+- Analysis deliverables (code-visible findings not runtime-exploited): any `*_analysis_deliverable.md` (especially `crypto_analysis_deliverable.md`, `web_attacks_analysis_deliverable.md`, `client_side_analysis_deliverable.md`) — mine these ONLY for concrete, code-visible findings that carry an exact `file:line` location.
 </input_files>
 
 <schema>
@@ -42,7 +43,7 @@ Write a JSON object with this exact shape:
       "llm_severity": "<Critical | High | Medium | Low | Informational>",
       "cwe": "<e.g. CWE-798, or null>",
       "owasp": "<e.g. A07:2021, or null>",
-      "status": "<Exploited | Blocked_by_Security | False_Positive | Out_of_Scope_Internal>",
+      "status": "<Exploited | Blocked_by_Security | Code_Verified | False_Positive | Out_of_Scope_Internal>",
       "confidence": "<High | Medium | Low>",
       "location": "<file:line or component, from evidence>",
       "affected_endpoint": "<URL/route, from evidence>",
@@ -64,12 +65,17 @@ Write a JSON object with this exact shape:
 
 <grounding_rules>
 MANDATORY — accuracy over completeness:
-1. Only include findings that appear in the evidence files. Never invent a finding.
+1. Only include findings that appear in the evidence files OR in the analysis deliverables listed above (for code-visible findings). Never invent a finding; every finding must trace to specific evidence or a concrete file:line in an analysis deliverable.
 2. Use the EXACT vulnerability IDs from the evidence. Deduplicate: if the same ID appears in multiple files, emit it once using the most complete evidence.
 3. Never invent a CVSS vector, CWE, or OWASP category you cannot justify from the evidence. If you cannot determine one, set it to null (use `llm_severity` to convey severity).
 4. `cvss_vector`, when present, MUST be a valid CVSS v3.1 base vector beginning with `CVSS:3.1/` and containing AV, AC, PR, UI, S, C, I, A.
 5. `chain_prerequisites` / `chain_enables` use short lowercase artifact tags (e.g. `admin_session`, `iam_credentials`, `db_read`, `internal_endpoint`). Only assert a chain relationship when the evidence explicitly establishes that one finding yields what another requires. When in doubt, leave both arrays empty.
-6. `status` must reflect the evidence verdict. Findings that were not exploitable from the external network (internal-only) are `Out_of_Scope_Internal`; disproven ones are `False_Positive`.
+6. `status` must reflect the evidence verdict:
+   - `Exploited` — a working runtime proof-of-concept exists in the exploitation evidence.
+   - `Blocked_by_Security` — exploitation was attempted but stopped by a control (WAF, validation, etc.).
+   - `Code_Verified` — the flaw is confirmed in source with a concrete `file:line` (e.g. a hardcoded/fallback JWT secret, unsalted MD5 hashing, a `jwt.verify` with no `algorithms` allow-list, a long-lived `expiresIn`, a token written to localStorage) but was NOT runtime-exploited in this run. Use this for real, code-evidenced findings that lack a live PoC — do NOT collapse them into `Out_of_Scope_Internal`.
+   - `Out_of_Scope_Internal` — only reachable from the internal network (VPN/host access), not from {{WEB_URL}}.
+   - `False_Positive` — disproven.
 7. `remediation.priority`: `Now` for Critical/High, `Soon` for Medium, `Later` for Low/Informational (use judgment).
 8. Set `assessment.models` to `[]` — it is filled in later. Set `assessment_date` to today's date.
 </grounding_rules>

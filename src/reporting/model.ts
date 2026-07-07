@@ -62,7 +62,13 @@ function computeFinding(f: FindingsDocument['findings'][number]): ComputedFindin
 
 export function buildReportModel(doc: FindingsDocument): ReportModel {
   const findings = doc.findings.map(computeFinding);
-  const reported = findings.filter((f) => REPORTED_STATUSES.includes(f.status));
+  // Code-verified findings (confirmed in source, not runtime-exploited) are
+  // surfaced only in 'coverage' mode; 'precision' stays exploited-only.
+  const includeCodeVerified = (doc.assessment.coverage_mode || '').toLowerCase() === 'coverage';
+  const reportedStatuses: Status[] = includeCodeVerified
+    ? [...REPORTED_STATUSES, 'Code_Verified']
+    : REPORTED_STATUSES;
+  const reported = findings.filter((f) => reportedStatuses.includes(f.status));
 
   return {
     assessment: doc.assessment,
