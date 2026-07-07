@@ -853,6 +853,83 @@ const enrichFindings = (findings) => findings.map((finding) => {
   };
 });
 
+// ── Display + de-duplication helpers ────────────────────────────────────────
+
+const titleCase = (s) =>
+  hasValue(s) ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '';
+
+// snake_case / lower → "Snake Case" for human-facing likelihood/impact labels
+const humanize = (s) =>
+  hasValue(s) ? String(s).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+
+// Single source of truth for a finding's endpoint (collapses the two overlapping fields)
+const getEndpoint = (f) => f.source_endpoint || f.affected_endpoint || '';
+
+const SEVERITY_BADGE = {
+  critical: '🔴 Critical', high: '🟠 High', medium: '🟡 Medium',
+  low: '🔵 Low', info: '⚪ Info', informational: '⚪ Info',
+};
+const severityBadge = (s) =>
+  SEVERITY_BADGE[(s || '').toLowerCase()] || (hasValue(s) ? titleCase(s) : '-');
+
+// Merge two multi-value fields (arrays or ";"/","-joined strings) into a de-duplicated string
+const mergeMulti = (a, b) => {
+  const parts = [];
+  for (const v of [a, b]) {
+    if (!hasValue(v)) continue;
+    const arr = Array.isArray(v) ? v : String(v).split(/[;,]/);
+    for (const p of arr) {
+      const t = String(p).trim();
+      if (t) parts.push(t);
+    }
+  }
+  return [...new Set(parts)].join('; ');
+};
+
+// Rough measure of how much evidence a finding carries, to pick the richer of two duplicates
+const completenessScore = (f) => {
+  const fields = [
+    'evidence_snippet', 'exploit_result', 'attack_path', 'exploitation_hypothesis',
+    'poc', 'remediation_suggestions', 'remediation', 'developer_verification_steps',
+    'business_impact', 'code_location', 'cwe',
+  ];
+  let score = 0;
+  for (const key of fields) {
+    const v = f[key];
+    if (hasValue(v)) score += String(Array.isArray(v) ? v.join(' ') : v).length;
+  }
+  return score;
+};
+
+// Dedup key: prefer the vulnerability ID; fall back to type + endpoint
+const dedupeKey = (f) => {
+  const id = (f.id || '').trim().toUpperCase();
+  if (id) return `id:${id}`;
+  const type = (f.type || '').trim().toLowerCase();
+  const ep = getEndpoint(f).trim().toLowerCase();
+  return `te:${type}|${ep}`;
+};
+
+// Collapse duplicate findings, keeping the most complete and merging provenance fields
+const dedupeFindings = (findings) => {
+  const byKey = new Map();
+  for (const f of findings) {
+    const key = dedupeKey(f);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, f);
+      continue;
+    }
+    const [keep, drop] =
+      completenessScore(f) >= completenessScore(existing) ? [f, existing] : [existing, f];
+    keep.original_ids = mergeMulti(keep.original_ids || keep.id, drop.original_ids || drop.id);
+    keep.source_file = mergeMulti(keep.source_file, drop.source_file);
+    keep.chained_with = mergeMulti(keep.chained_with, drop.chained_with);
+    byKey.set(key, keep);
+  }
+  return [...byKey.values()];
+};
+
 // ── Report generators ──────────────────────────────────────────────────────
 
 const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4, informational: 4 };
@@ -869,23 +946,30 @@ const generateDeveloperReport = (findings) => {
   lines.push(`**Total Findings:** ${findings.length}`);
   lines.push('');
 
+  // How to use
+  lines.push('> **How to use this report:** Findings are ordered by severity. Each entry under *Detailed Findings* names the vulnerable location, shows the supporting evidence, gives a concrete fix, and lists steps to verify the fix. Work the *Remediation Checklist* at the bottom in order — exploited issues first.');
+  lines.push('');
+
   // Severity breakdown
   const bySev = {};
   for (const f of findings) {
-    const s = (f.severity || 'Unknown').toLowerCase();
+    const s = (f.severity || 'unknown').toLowerCase();
     bySev[s] = (bySev[s] || 0) + 1;
   }
-  lines.push(`**Critical:** ${bySev.critical || 0} | **High:** ${bySev.high || 0} | **Medium:** ${bySev.medium || 0} | **Low:** ${bySev.low || 0} | **Info:** ${(bySev.info || 0) + (bySev.informational || 0)}`);
+  const exploitedTotal = findings.filter((f) => (f.status || '').toLowerCase() === 'exploited').length;
+  lines.push(`**Severity:** 🔴 ${bySev.critical || 0} Critical · 🟠 ${bySev.high || 0} High · 🟡 ${bySev.medium || 0} Medium · 🔵 ${bySev.low || 0} Low · ⚪ ${(bySev.info || 0) + (bySev.informational || 0)} Info`);
+  lines.push('');
+  lines.push(`**Confirmed exploitable:** ${exploitedTotal} of ${findings.length}`);
   lines.push('');
 
   // Summary table
   lines.push('## Vulnerability Summary');
   lines.push('');
-  lines.push('| ID | Type | Severity | Endpoint | Status | CWE |');
-  lines.push('|----|------|----------|----------|--------|-----|');
+  lines.push('| ID | Title | Severity | Endpoint | Status | CWE |');
+  lines.push('|----|-------|----------|----------|--------|-----|');
   for (const f of sorted) {
-    const endpoint = (f.source_endpoint || f.affected_endpoint || '').slice(0, 60);
-    lines.push(`| ${f.id || '-'} | ${f.type || '-'} | ${f.severity || '-'} | \`${endpoint}\` | ${f.status || '-'} | ${(f.cwe || '').split(';')[0] || '-'} |`);
+    const endpoint = getEndpoint(f).slice(0, 60);
+    lines.push(`| ${f.id || '-'} | ${f.type || '-'} | ${severityBadge(f.severity)} | \`${endpoint || '-'}\` | ${titleCase(f.status) || '-'} | ${(f.cwe || '').split(';')[0] || '-'} |`);
   }
   lines.push('');
 
@@ -939,7 +1023,7 @@ const generateDeveloperReport = (findings) => {
   lines.push('');
 
   for (const f of sorted) {
-    lines.push(`### ${f.id || 'Unknown'}: ${f.type || 'Unknown Type'}`);
+    lines.push(`### ${f.id || 'Unknown'}: ${f.type || 'Unknown Type'} — ${severityBadge(f.severity)}`);
     lines.push('');
     lines.push(`- **Severity:** ${f.severity || '-'}`);
     lines.push(`- **Status:** ${f.status || '-'}`);
@@ -1045,6 +1129,22 @@ const generateExecutiveReport = (findings) => {
   lines.push(`**Generated:** ${date}`);
   lines.push('');
 
+  // Bottom line up front — plain language for non-security readers
+  const critHighCount = findings.filter((f) => ['critical', 'high'].includes((f.severity || '').toLowerCase())).length;
+  const exploitedUp = findings.filter((f) => (f.status || '').toLowerCase() === 'exploited').length;
+  const topRisk = [...findings].sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0];
+  lines.push('## Bottom Line');
+  lines.push('');
+  lines.push(`This assessment found **${findings.length} findings**, of which **${critHighCount} are Critical or High severity** and **${exploitedUp} were confirmed exploitable** during testing.`);
+  if (topRisk) {
+    const biz = topRisk.business_impact ? ` — ${String(topRisk.business_impact).replace(/\s+/g, ' ').trim().replace(/\.$/, '')}` : '';
+    lines.push('');
+    lines.push(`The single highest-risk issue is **${topRisk.id || topRisk.type}** (${titleCase(topRisk.severity)}, risk ${topRisk.risk_score || '-'}/10)${biz}.`);
+  }
+  lines.push('');
+  lines.push('**Recommended focus:** remediate the confirmed-exploitable findings first, then the remaining Critical/High issues following the *Strategic Remediation Roadmap* at the end of this report.');
+  lines.push('');
+
   // Executive summary
   lines.push('## Executive Summary');
   lines.push('');
@@ -1114,6 +1214,9 @@ const generateExecutiveReport = (findings) => {
     });
     lines.push(`| ${row} | ${cells.join(' | ')} |`);
   }
+  lines.push('');
+
+  lines.push('*Cell values are finding counts. The top-left region (high likelihood × high impact) is the most urgent to remediate.*');
   lines.push('');
 
   // Top risks by risk score
@@ -1287,49 +1390,45 @@ const generateExecutiveReport = (findings) => {
   return lines.join('\n');
 };
 
+// Curated, human-readable column set. Overlapping/redundant fields are collapsed:
+//   - source_endpoint + affected_endpoint  -> single "Endpoint"
+//   - cwe already embeds names             -> "cwe_names" dropped
+//   - attack_path falls back to exploitation_hypothesis
+// Internal metadata (source_file, report_section, notes, original_ids) is intentionally omitted.
+const CSV_COLUMNS = [
+  { header: 'ID', get: (f) => f.id },
+  { header: 'Title', get: (f) => f.type },
+  { header: 'Severity', get: (f) => titleCase(f.severity) },
+  { header: 'Status', get: (f) => titleCase(f.status) },
+  { header: 'Confidence', get: (f) => titleCase(f.confidence) },
+  { header: 'Risk Score (0-10)', get: (f) => f.risk_score },
+  { header: 'Likelihood', get: (f) => humanize(f.likelihood) },
+  { header: 'Impact', get: (f) => humanize(f.impact_level) },
+  { header: 'CWE', get: (f) => f.cwe },
+  { header: 'Endpoint', get: (f) => getEndpoint(f) },
+  { header: 'Parameter', get: (f) => f.parameter },
+  { header: 'Code Location', get: (f) => f.code_location },
+  { header: 'Attack Path', get: (f) => f.attack_path || f.exploitation_hypothesis },
+  { header: 'Evidence', get: (f) => f.evidence_snippet },
+  { header: 'Business Impact', get: (f) => f.business_impact },
+  { header: 'Data at Risk', get: (f) => f.data_at_risk },
+  { header: 'Compliance', get: (f) => f.compliance_impact },
+  { header: 'Remediation', get: (f) => f.remediation_suggestions },
+  { header: 'Verification Steps', get: (f) => f.developer_verification_steps },
+  { header: 'Attack Chain', get: (f) => f.attack_chain_id },
+  { header: 'Chain Role', get: (f) => (f.attack_chain_role === 'standalone' ? '' : f.attack_chain_role) },
+];
+
 const findingsToCSV = (findings) => {
-  const keySet = new Set();
-  for (const f of findings) {
-    for (const k of Object.keys(f)) {
-      keySet.add(k);
-    }
-  }
+  const sorted = [...findings].sort(sortBySeverity);
 
-  const preferredOrder = [
-    'id', 'type', 'severity', 'status',
-    'likelihood', 'impact_level', 'risk_score',
-    'source_endpoint', 'parameter', 'code_location',
-    'missing_defense', 'attack_path', 'exploitation_hypothesis',
-    'confidence', 'externally_exploitable', 'cwe', 'cwe_names', 'remediation_suggestions',
-    'developer_verification_steps',
-    'estimated_annual_occurrence', 'business_impact', 'data_at_risk', 'compliance_impact',
-    'attack_chain_id', 'attack_chain_role', 'attack_chain_description', 'chained_with',
-    'evidence_snippet', 'exploit_result', 'affected_endpoint',
-    'attack_steps_summary', 'report_section', 'source_file', 'notes',
-  ];
-
-  const header = [];
-  for (const k of preferredOrder) {
-    if (keySet.has(k)) {
-      header.push(k);
-      keySet.delete(k);
-    }
-  }
-  for (const k of [...keySet].sort()) {
-    header.push(k);
-  }
-
-  logInfo(`CSV columns (${header.length}): ${DIM}${header.join(', ')}${RESET}`);
-
-  // Check how many findings have verification steps
-  const withSteps = findings.filter(f => f.developer_verification_steps && f.developer_verification_steps.length > 0).length;
+  logInfo(`CSV columns (${CSV_COLUMNS.length}): ${DIM}${CSV_COLUMNS.map((c) => c.header).join(', ')}${RESET}`);
+  const withSteps = findings.filter((f) => hasValue(f.developer_verification_steps)).length;
   logInfo(`Findings with verification steps: ${withSteps}/${findings.length}`);
 
-  const lines = [header.map(csvEscape).join(',')];
-  for (const row of findings) {
-    lines.push(
-      header.map((key) => csvEscape(row[key] ?? '')).join(',')
-    );
+  const lines = [CSV_COLUMNS.map((c) => csvEscape(c.header)).join(',')];
+  for (const f of sorted) {
+    lines.push(CSV_COLUMNS.map((c) => csvEscape(c.get(f) ?? '')).join(','));
   }
 
   return lines.join('\n');
@@ -1346,14 +1445,21 @@ if (reuseJson && fs.existsSync(jsonOutputPath)) {
   await runAgent();
 }
 
-const findings = loadFindings();
+const rawFindings = loadFindings();
 
-if (!findings || findings.length === 0) {
+if (!rawFindings || rawFindings.length === 0) {
   logError('No findings extracted.');
   logError('Check these locations for agent output:');
   logError(`  - ${jsonOutputPath}`);
   logError(`  - ${absDeliverables}/*.json`);
   process.exit(1);
+}
+
+// Collapse duplicate findings (same ID, or same type+endpoint) before rendering
+const findings = dedupeFindings(rawFindings);
+const removedDupes = rawFindings.length - findings.length;
+if (removedDupes > 0) {
+  logInfo(`De-duplicated ${removedDupes} finding(s): ${rawFindings.length} -> ${findings.length}`);
 }
 
 const enrichedFindings = enrichFindings(findings);

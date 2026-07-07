@@ -181,10 +181,17 @@ node scripts/export-findings-csv.js repos/DVWA/deliverables reports/dvwa-finding
 
 - Reads every file in the folder with the Claude Agent SDK (no regex/format
   assumptions) and extracts structured findings.
-- The second positional arg is the output CSV path. If omitted, it defaults to
-  `<deliverables-dir>/findings.csv`. Either way it also drops a companion
-  `<name>_findings.json` next to the CSV.
-- `--reuse-json` skips re-analysis and rebuilds the CSV from the cached
+- **Produces four files per run:**
+  - the **CSV** at your output path (default `<deliverables-dir>/findings.csv`) —
+    a curated, human-readable column set, de-duplicated, sorted by severity;
+  - a companion **`<name>_findings.json`** (structured cache);
+  - **`developer_security_report.md`** — engineer-facing (summary table,
+    per-finding evidence + fix + verification steps, remediation checklist);
+  - **`executive_security_report.md`** — leadership-facing ("Bottom Line",
+    CRQ risk matrix, top risks, compliance exposure, remediation roadmap).
+- Duplicate findings (same ID, or same type+endpoint) are collapsed
+  automatically, keeping the most complete version.
+- `--reuse-json` skips re-analysis and rebuilds all outputs from the cached
   `_findings.json` (fast, free — use after a first full run).
 
 > Human oversight is required: the LLM can still surface weakly-supported or
