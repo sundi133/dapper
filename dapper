@@ -26,6 +26,7 @@ show_help() {
 
 Usage:
   ./dapper start URL=<url> REPO=<name>   Start a pentest workflow (Temporal)
+  ./dapper start URL=<url>               Black-box mode: no REPO, URL-only testing
   ./dapper deepagent [URL=<url>] [REPO=<name>] [CONFIG=<file>]
                                          Run via LangChain DeepAgents orchestrator
                                          (interactive setup if args missing)
@@ -37,7 +38,7 @@ Usage:
   ./dapper help                          Show this help message
 
 Options for 'start':
-  REPO=<name>            Folder name under ./repos/ (e.g. REPO=repo-name)
+  REPO=<name>            Folder name under ./repos/ (e.g. REPO=repo-name). Omit for black-box/URL-only mode.
   SUBDIR=<path>          Subdirectory within repo to focus analysis on (e.g. SUBDIR=src/api)
   CONFIG=<path>          Configuration file (YAML)
   OUTPUT=<path>          Output directory for reports (default: ./audit-logs/)
@@ -48,6 +49,7 @@ Options for 'stop':
   CLEAN=true             Remove all data including volumes
 
 Examples:
+  ./dapper start URL=https://example.com
   ./dapper start URL=https://example.com REPO=repo-name
   ./dapper start URL=https://example.com REPO=repo-name SUBDIR=src/api
   ./dapper start URL=https://example.com REPO=repo-name CONFIG=./config.yaml
@@ -126,9 +128,9 @@ cmd_start() {
   parse_args "$@"
 
   # Validate required vars
-  if [ -z "$URL" ] || [ -z "$REPO" ]; then
-    echo "ERROR: URL and REPO are required"
-    echo "Usage: ./dapper start URL=<url> REPO=<name>"
+  if [ -z "$URL" ]; then
+    echo "ERROR: URL is required"
+    echo "Usage: ./dapper start URL=<url> [REPO=<name>]"
     exit 1
   fi
 
@@ -145,22 +147,34 @@ cmd_start() {
   fi
 
   # Determine container path for REPO
+  # - If REPO is omitted, auto-provision an empty scratch workspace (black-box mode)
   # - If REPO is already a container path (/benchmarks/*, /repos/*), use as-is
   # - Otherwise, treat as a folder name under ./repos/ (mounted at /repos in container)
-  case "$REPO" in
-    /benchmarks/*|/repos/*)
-      CONTAINER_REPO="$REPO"
-      ;;
-    *)
-      if [ ! -d "./repos/$REPO" ]; then
-        echo "ERROR: Repository not found at ./repos/$REPO"
-        echo ""
-        echo "Place your target repository under the ./repos/ directory"
-        exit 1
-      fi
-      CONTAINER_REPO="/repos/$REPO"
-      ;;
-  esac
+  NOCODEBASE=""
+  if [ -z "$REPO" ]; then
+    NOCODEBASE="true"
+    HOSTNAME_SLUG=$(echo "$URL" | sed -E 's#^[a-zA-Z]+://##; s#/.*$##' | tr -cs 'A-Za-z0-9' '-' | tr '[:upper:]' '[:lower:]')
+    REPO="_blackbox_${HOSTNAME_SLUG}_$(date +%s)"
+    echo "No REPO provided - running in black-box mode (URL-only, no source code)"
+    mkdir -p "./repos/$REPO"
+    echo "This is an empty scratch workspace. No target source code was provided for this engagement." > "./repos/$REPO/README.md"
+    CONTAINER_REPO="/repos/$REPO"
+  else
+    case "$REPO" in
+      /benchmarks/*|/repos/*)
+        CONTAINER_REPO="$REPO"
+        ;;
+      *)
+        if [ ! -d "./repos/$REPO" ]; then
+          echo "ERROR: Repository not found at ./repos/$REPO"
+          echo ""
+          echo "Place your target repository under the ./repos/ directory"
+          exit 1
+        fi
+        CONTAINER_REPO="/repos/$REPO"
+        ;;
+    esac
+  fi
 
   # Validate SUBDIR if provided
   if [ -n "$SUBDIR" ]; then
@@ -243,6 +257,7 @@ cmd_start() {
 
   [ "$PIPELINE_TESTING" = "true" ] && ARGS="$ARGS --pipeline-testing"
   [ -n "$SUBDIR" ] && ARGS="$ARGS --subdir $SUBDIR"
+  [ "$NOCODEBASE" = "true" ] && ARGS="$ARGS --no-codebase"
 
   # Run the client to submit workflow
   docker compose -f "$COMPOSE_FILE" exec -T worker \

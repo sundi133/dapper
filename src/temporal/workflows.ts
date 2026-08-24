@@ -138,6 +138,7 @@ export async function pentestPipelineWorkflow(
     ...(input.pipelineTestingMode !== undefined && {
       pipelineTestingMode: input.pipelineTestingMode,
     }),
+    ...(input.noCodebase !== undefined && { noCodebase: input.noCodebase }),
   };
 
   try {

@@ -9,6 +9,7 @@ export interface PipelineInput {
   configPath?: string;
   outputPath?: string;
   pipelineTestingMode?: boolean;
+  noCodebase?: boolean; // True for black-box (URL-only) runs with no target source code
   workflowId?: string; // Added by client, used for audit correlation
 }
 

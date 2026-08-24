@@ -90,6 +90,7 @@ export interface ActivityInput {
   configPath?: string;
   outputPath?: string;
   pipelineTestingMode?: boolean;
+  noCodebase?: boolean;
   workflowId: string;
 }
 
@@ -118,6 +119,7 @@ async function runAgentActivity(
     configPath,
     outputPath,
     pipelineTestingMode = false,
+    noCodebase = false,
     workflowId,
   } = input;
 
@@ -160,7 +162,7 @@ async function runAgentActivity(
     const promptName = getPromptNameForAgent(agentName);
     const prompt = await loadPrompt(
       promptName,
-      { webUrl, repoPath, ...(subDir && { subDir }) },
+      { webUrl, repoPath, ...(subDir && { subDir }), noCodebase },
       distributedConfig,
       pipelineTestingMode
     );
@@ -490,7 +492,7 @@ export async function injectReportMetadataActivity(input: ActivityInput): Promis
  * Non-fatal: on failure the legacy Markdown report from runReportAgent remains.
  */
 export async function enrichFindingsActivity(input: ActivityInput): Promise<void> {
-  const { webUrl, repoPath, subDir, configPath, pipelineTestingMode = false } = input;
+  const { webUrl, repoPath, subDir, configPath, pipelineTestingMode = false, noCodebase = false } = input;
   console.log(chalk.blue('🧮 Enriching findings into findings.json...'));
   try {
     // Resolve config the same way runAgentActivity does, then load the prompt.
@@ -501,7 +503,7 @@ export async function enrichFindingsActivity(input: ActivityInput): Promise<void
     }
     const prompt = await loadPrompt(
       'report-enrich',
-      { webUrl, repoPath, ...(subDir && { subDir }) },
+      { webUrl, repoPath, ...(subDir && { subDir }), noCodebase },
       distributedConfig,
       pipelineTestingMode
     );

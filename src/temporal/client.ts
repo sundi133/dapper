@@ -51,6 +51,7 @@ function showUsage(): void {
   console.log('  --subdir <path>       Subdirectory within repo to focus analysis on');
   console.log('  --output <path>       Output directory for audit logs');
   console.log('  --pipeline-testing    Use minimal prompts for fast testing');
+  console.log('  --no-codebase         Black-box mode: no target source code, URL-only testing');
   console.log(
     '  --workflow-id <id>    Custom workflow ID (default: dapper-<timestamp>)'
   );
@@ -78,6 +79,7 @@ async function startPipeline(): Promise<void> {
   let outputPath: string | undefined;
   let displayOutputPath: string | undefined; // Host path for display purposes
   let pipelineTestingMode = false;
+  let noCodebase = false;
   let customWorkflowId: string | undefined;
   let waitForCompletion = false;
 
@@ -115,6 +117,8 @@ async function startPipeline(): Promise<void> {
       }
     } else if (arg === '--pipeline-testing') {
       pipelineTestingMode = true;
+    } else if (arg === '--no-codebase') {
+      noCodebase = true;
     } else if (arg === '--wait') {
       waitForCompletion = true;
     } else if (arg && !arg.startsWith('-')) {
@@ -152,6 +156,7 @@ async function startPipeline(): Promise<void> {
       ...(configPath && { configPath }),
       ...(outputPath && { outputPath }),
       ...(pipelineTestingMode && { pipelineTestingMode }),
+      ...(noCodebase && { noCodebase }),
     };
 
     // Determine output directory for display
@@ -174,6 +179,9 @@ async function startPipeline(): Promise<void> {
     }
     if (pipelineTestingMode) {
       console.log(chalk.white('  Mode:       ') + chalk.yellow('Pipeline Testing'));
+    }
+    if (noCodebase) {
+      console.log(chalk.white('  Codebase:   ') + chalk.yellow('None (black-box, URL-only)'));
     }
     console.log();
 
