@@ -69,6 +69,7 @@ import {
 } from '../utils/git-manager.js';
 import { assembleFinalReport, injectModelIntoReport } from '../phases/reporting.js';
 import { enrichFindings, renderAllReports } from '../reporting/orchestrate.js';
+import { runWhiteboxAnalysis, writeWhiteboxDeliverables } from '../whitebox/index.js';
 import { getPromptNameForAgent } from '../types/agents.js';
 import { AuditSession } from '../audit/index.js';
 import type { WorkflowSummary } from '../audit/workflow-logger.js';
@@ -511,6 +512,69 @@ export async function enrichFindingsActivity(input: ActivityInput): Promise<void
   } catch (error) {
     const err = error as Error;
     console.log(chalk.yellow(`⚠️ Findings enrichment failed (non-fatal): ${err.message}`));
+  }
+}
+
+/**
+ * Deterministic white-box analysis (capabilities 1.1–1.7): runs off-the-shelf
+ * scanners (osv-scanner / gitleaks / semgrep) over the target source and folds a
+ * concise summary into pre_recon_deliverable.md so downstream LLM agents
+ * prioritise and validate the findings.
+ *
+ * Strictly additive and best-effort:
+ *  - skipped in black-box (noCodebase) and pipeline-testing modes,
+ *  - skipped when disabled via config (coverage.include_whitebox === false),
+ *  - skipped when no scanners are installed,
+ *  - NEVER throws — any failure is logged and the pipeline continues unaffected.
+ */
+export async function runWhiteboxAnalysisActivity(input: ActivityInput): Promise<void> {
+  const { repoPath, subDir, configPath, pipelineTestingMode = false, noCodebase = false } = input;
+
+  if (noCodebase) {
+    console.log(chalk.gray('    ⏭️ White-box analysis skipped (black-box / no-codebase run)'));
+    return;
+  }
+  if (pipelineTestingMode) {
+    console.log(chalk.gray('    ⏭️ White-box analysis skipped (pipeline testing mode)'));
+    return;
+  }
+
+  try {
+    // Resolve config the same way runAgentActivity does (best-effort).
+    let distributedConfig: DistributedConfig | null = null;
+    if (configPath) {
+      try {
+        distributedConfig = distributeConfig(await parseConfig(configPath));
+      } catch {
+        distributedConfig = null; // config problems must not block the white-box pass
+      }
+    }
+    const includeWhitebox = distributedConfig?.coverage?.include_whitebox ?? true;
+    if (!includeWhitebox) {
+      console.log(chalk.gray('    ⏭️ White-box analysis disabled (coverage.include_whitebox=false)'));
+      return;
+    }
+
+    console.log(chalk.blue('🔬 Running deterministic white-box analysis (SAST / SCA / dataflow)...'));
+    const analysis = await runWhiteboxAnalysis({
+      repoPath,
+      ...(subDir && { subDir }),
+      generatedAt: new Date().toISOString(),
+    });
+    if (!analysis) {
+      // No scanners installed or no source — nothing to write.
+      return;
+    }
+    await writeWhiteboxDeliverables(analysis, repoPath);
+    console.log(
+      chalk.green(
+        `    ✅ White-box analysis: ${analysis.cve.length} CVEs, ${analysis.secrets.length} secrets, ` +
+          `${analysis.taint.length} tainted flows, ${analysis.sast.length} sinks, ${analysis.authz.length} routes`
+      )
+    );
+  } catch (error) {
+    const err = error as Error;
+    console.log(chalk.yellow(`⚠️ White-box analysis failed (non-fatal): ${err.message}`));
   }
 }
 

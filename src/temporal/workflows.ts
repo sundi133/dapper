@@ -151,6 +151,13 @@ export async function pentestPipelineWorkflow(
     state.completedAgents.push('pre-recon');
     await a.logPhaseTransition(activityInput, 'pre-recon', 'complete');
 
+    // === Phase 1b: Deterministic White-Box Analysis (SAST / SCA / dataflow) ===
+    // Additive, best-effort: runs off-the-shelf scanners over the source and folds a
+    // summary into the pre-recon deliverables (code_analysis/pre_recon) that the
+    // threat-model/vuln/report agents ingest. The activity never throws (auto-skips in
+    // black-box/pipeline/disabled/no-tools cases), so this line cannot break the pipeline.
+    await a.runWhiteboxAnalysisActivity(activityInput);
+
     // === Phase 2: Threat Modeling ===
     state.currentPhase = 'pre-recon';
     state.currentAgent = 'threat-model';

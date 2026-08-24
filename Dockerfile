@@ -50,6 +50,13 @@ RUN git clone --depth 1 https://github.com/urbanadventurer/WhatWeb.git /opt/what
 # Install Python-based tools
 RUN pip3 install --no-cache-dir schemathesis
 
+# Install deterministic white-box scanners (SAST / SCA / dataflow — capabilities 1.1–1.7).
+# Best-effort and GUARDED: each optional install is `|| echo`-ed so a failure can never
+# break the image build. When a scanner is absent the white-box pass degrades gracefully.
+RUN pip3 install --no-cache-dir semgrep || echo "semgrep install skipped (optional)"
+RUN go install github.com/google/osv-scanner/cmd/osv-scanner@latest || echo "osv-scanner install skipped (optional)"
+RUN go install github.com/zricethezav/gitleaks/v8@latest || echo "gitleaks install skipped (optional)"
+
 # Runtime stage - Minimal production image
 FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
 
@@ -87,8 +94,9 @@ RUN apk update && apk add --no-cache \
     # Font rendering
     fontconfig
 
-# Copy Go binaries from builder
-COPY --from=builder /go/bin/subfinder /usr/local/bin/
+# Copy Go binaries from builder (subfinder + optional white-box scanners osv-scanner/gitleaks).
+# Directory copy is resilient: it succeeds even if an optional scanner did not build.
+COPY --from=builder /go/bin/ /usr/local/bin/
 
 # Copy WhatWeb from builder
 COPY --from=builder /opt/whatweb /opt/whatweb

@@ -74,6 +74,8 @@ export interface CoverageConfig {
   include_potential?: boolean;
   include_headers_tls?: boolean;
   include_sast_sca?: boolean;
+  /** Run the deterministic white-box pass (osv-scanner/gitleaks/semgrep). Default: true. */
+  include_whitebox?: boolean;
   max_findings?: number;
 }
 
