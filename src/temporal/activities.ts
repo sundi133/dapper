@@ -70,6 +70,7 @@ import {
 import { assembleFinalReport, injectModelIntoReport } from '../phases/reporting.js';
 import { enrichFindings, renderAllReports } from '../reporting/orchestrate.js';
 import { runWhiteboxAnalysis, writeWhiteboxDeliverables } from '../whitebox/index.js';
+import { runDastAnalysis, writeDastDeliverables } from '../dast/index.js';
 import { getPromptNameForAgent } from '../types/agents.js';
 import { AuditSession } from '../audit/index.js';
 import type { WorkflowSummary } from '../audit/workflow-logger.js';
@@ -575,6 +576,58 @@ export async function runWhiteboxAnalysisActivity(input: ActivityInput): Promise
   } catch (error) {
     const err = error as Error;
     console.log(chalk.yellow(`⚠️ White-box analysis failed (non-fatal): ${err.message}`));
+  }
+}
+
+/**
+ * Deterministic DAST analysis (Tier-2 ADD group): runs off-the-shelf scanners
+ * (nuclei / testssl.sh / retire.js) against the LIVE target and folds a concise
+ * summary into recon_deliverable.md so the vuln/exploit agents prioritise and
+ * validate the confirmed live signals.
+ *
+ * Strictly additive and best-effort. Unlike the white-box pass, DAST runs even
+ * in black-box (no-codebase) mode since it only needs the live URL. It is:
+ *  - skipped in pipeline-testing mode,
+ *  - skipped when disabled via config (coverage.include_dast === false),
+ *  - skipped when no scanners are installed,
+ *  - NEVER throws — any failure is logged and the pipeline continues unaffected.
+ */
+export async function runDastAnalysisActivity(input: ActivityInput): Promise<void> {
+  const { webUrl, configPath, repoPath, pipelineTestingMode = false } = input;
+
+  if (pipelineTestingMode) {
+    console.log(chalk.gray('    ⏭️ DAST analysis skipped (pipeline testing mode)'));
+    return;
+  }
+
+  try {
+    let distributedConfig: DistributedConfig | null = null;
+    if (configPath) {
+      try {
+        distributedConfig = distributeConfig(await parseConfig(configPath));
+      } catch {
+        distributedConfig = null; // config problems must not block the DAST pass
+      }
+    }
+    const includeDast = distributedConfig?.coverage?.include_dast ?? true;
+    if (!includeDast) {
+      console.log(chalk.gray('    ⏭️ DAST analysis disabled (coverage.include_dast=false)'));
+      return;
+    }
+
+    console.log(chalk.blue('🌐 Running deterministic DAST probes (nuclei / testssl / retire.js)...'));
+    const analysis = await runDastAnalysis({ target: webUrl, generatedAt: new Date().toISOString() });
+    if (!analysis) {
+      // Invalid target or no scanners installed — nothing to write.
+      return;
+    }
+    await writeDastDeliverables(analysis, repoPath);
+    console.log(
+      chalk.green(`    ✅ DAST analysis: ${analysis.findings.length} findings across ${analysis.findings.filter((f) => f.severity !== 'info').length} actionable`)
+    );
+  } catch (error) {
+    const err = error as Error;
+    console.log(chalk.yellow(`⚠️ DAST analysis failed (non-fatal): ${err.message}`));
   }
 }
 

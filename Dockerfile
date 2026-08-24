@@ -57,6 +57,14 @@ RUN pip3 install --no-cache-dir semgrep || echo "semgrep install skipped (option
 RUN go install github.com/google/osv-scanner/cmd/osv-scanner@latest || echo "osv-scanner install skipped (optional)"
 RUN go install github.com/zricethezav/gitleaks/v8@latest || echo "gitleaks install skipped (optional)"
 
+# Install deterministic DAST scanners (Tier-2 ADD group — nuclei/testssl.sh/retire.js).
+# Guarded so a failed optional install never breaks the build. nuclei templates are
+# pre-downloaded to a fixed dir the runner points at via NUCLEI_TEMPLATES_DIR.
+RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest || echo "nuclei install skipped (optional)"
+RUN mkdir -p /opt/nuclei-templates && (nuclei -ut -ud /opt/nuclei-templates -disable-update-check || echo "nuclei templates download skipped (optional)")
+RUN npm install -g retire || echo "retire install skipped (optional)"
+RUN git clone --depth 1 https://github.com/testssl/testssl.sh.git /opt/testssl 2>/dev/null || mkdir -p /opt/testssl
+
 # Runtime stage - Minimal production image
 FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
 
@@ -92,11 +100,21 @@ RUN apk update && apk add --no-cache \
     libxrandr \
     mesa-gbm \
     # Font rendering
-    fontconfig
+    fontconfig \
+    # openssl for testssl.sh (deep TLS scanning)
+    openssl
 
-# Copy Go binaries from builder (subfinder + optional white-box scanners osv-scanner/gitleaks).
-# Directory copy is resilient: it succeeds even if an optional scanner did not build.
+# Copy Go binaries from builder (subfinder + optional white-box scanners osv-scanner/gitleaks
+# + optional DAST scanner nuclei). Directory copy is resilient: it succeeds even if an
+# optional scanner did not build.
 COPY --from=builder /go/bin/ /usr/local/bin/
+
+# DAST assets from builder: pre-downloaded nuclei templates + testssl.sh (both dirs always
+# exist in the builder, so these copies never fail even if a download/clone was skipped).
+COPY --from=builder /opt/nuclei-templates /opt/nuclei-templates
+ENV NUCLEI_TEMPLATES_DIR=/opt/nuclei-templates
+COPY --from=builder /opt/testssl /opt/testssl
+RUN ln -sf /opt/testssl/testssl.sh /usr/local/bin/testssl.sh || true
 
 # Copy WhatWeb from builder
 COPY --from=builder /opt/whatweb /opt/whatweb
@@ -108,6 +126,9 @@ RUN gem install addressable
 # Copy Python packages from builder
 COPY --from=builder /usr/lib/python3.*/site-packages /usr/lib/python3.12/site-packages
 COPY --from=builder /usr/bin/schemathesis /usr/bin/
+
+# retire.js (client-side JS CVE scanner) — Node global in the runtime image.
+RUN npm install -g retire || echo "retire runtime install skipped (optional)"
 
 # Create non-root user for security
 RUN addgroup -g 1001 pentest && \

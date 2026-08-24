@@ -76,6 +76,8 @@ export interface CoverageConfig {
   include_sast_sca?: boolean;
   /** Run the deterministic white-box pass (osv-scanner/gitleaks/semgrep). Default: true. */
   include_whitebox?: boolean;
+  /** Run the deterministic DAST pass (nuclei/testssl.sh/retire.js). Default: true. */
+  include_dast?: boolean;
   max_findings?: number;
 }
 

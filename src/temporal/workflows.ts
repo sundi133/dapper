@@ -174,6 +174,14 @@ export async function pentestPipelineWorkflow(
     state.completedAgents.push('recon');
     await a.logPhaseTransition(activityInput, 'recon', 'complete');
 
+    // === Phase 3b: Deterministic DAST probes (nuclei / testssl / retire.js) ===
+    // Additive, best-effort: runs off-the-shelf scanners against the live target and
+    // folds a summary into recon_deliverable.md so the vuln/exploit agents prioritise
+    // and validate the confirmed live signals. Runs in black-box mode too (only needs
+    // the URL). The activity never throws (auto-skips in pipeline/disabled/no-tools
+    // cases), so this line cannot break the pipeline.
+    await a.runDastAnalysisActivity(activityInput);
+
     // === Phases 3-4: Vulnerability Analysis + Exploitation (Pipelined) ===
     // Each vuln type runs as an independent pipeline:
     // vuln agent → queue check → conditional exploit agent

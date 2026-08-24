@@ -382,12 +382,14 @@ const sanitizeCoverage = (coverage?: CoverageConfig): CoverageConfig => {
   // FAILSAFE_SCHEMA (all scalars parsed as strings); coerce it to a real boolean so
   // the disable switch works regardless. Absent -> undefined (defaults to enabled).
   const includeWhitebox = coerceOptionalBool((coverage as { include_whitebox?: unknown }).include_whitebox);
+  const includeDast = coerceOptionalBool((coverage as { include_dast?: unknown }).include_dast);
   return {
     mode,
     ...(coverage.include_potential !== undefined && { include_potential: coverage.include_potential }),
     ...(coverage.include_headers_tls !== undefined && { include_headers_tls: coverage.include_headers_tls }),
     ...(coverage.include_sast_sca !== undefined && { include_sast_sca: coverage.include_sast_sca }),
     ...(includeWhitebox !== undefined && { include_whitebox: includeWhitebox }),
+    ...(includeDast !== undefined && { include_dast: includeDast }),
     ...(coverage.max_findings !== undefined && { max_findings: coverage.max_findings }),
   };
 };
