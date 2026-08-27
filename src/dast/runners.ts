@@ -69,11 +69,15 @@ const TESTSSL_MAX_DURATION = '600s'; // 10 min
 export async function runNuclei(targetUrl: string): Promise<RunnerResult> {
   const report = tmpFile('nuclei.jsonl');
   try {
-    // In the container, templates are pre-downloaded to a fixed path (NUCLEI_TEMPLATES_DIR);
-    // locally, nuclei uses its own default store. Only pass -t when the dir actually exists.
+    // In the container, templates are pre-installed to a fixed path (NUCLEI_TEMPLATES_DIR);
+    // locally, nuclei uses its own default store. Only pass -t when the dir exists AND is
+    // non-empty — pointing nuclei at an empty dir makes it fail with "no templates provided".
+    let templatesArgs: string[] = [];
     const templatesDir = process.env['NUCLEI_TEMPLATES_DIR'] ?? '';
-    const templatesArgs =
-      templatesDir && (await fs.pathExists(templatesDir)) ? ['-t', templatesDir] : [];
+    if (templatesDir && (await fs.pathExists(templatesDir))) {
+      const entries = await fs.readdir(templatesDir).catch(() => [] as string[]);
+      if (entries.length > 0) templatesArgs = ['-t', templatesDir];
+    }
     const argv = [
       'nuclei',
       '-u',

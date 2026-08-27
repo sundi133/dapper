@@ -73,21 +73,25 @@ function buildMcpServers(
     if (playwrightMcpName) {
       console.log(chalk.gray(`    Assigned ${agentName} -> ${playwrightMcpName}`));
 
-      const userDataDir = `/tmp/${playwrightMcpName}`;
-
       // Docker uses system Chromium; local dev uses Playwright's bundled browsers
       const isDocker = process.env.DAPPER_DOCKER === 'true';
 
+      // `--isolated` gives each agent its own in-memory browser profile. Do NOT also pass
+      // `--user-data-dir`: current @playwright/mcp rejects that combination
+      // ("Browser userDataDir is not supported in isolated mode.") and the MCP fails to start.
       const mcpArgs: string[] = [
         '@playwright/mcp@latest',
         '--isolated',
-        '--user-data-dir', userDataDir,
       ];
 
       // Docker: Use system Chromium; Local: Use Playwright's bundled browsers
       if (isDocker) {
         mcpArgs.push('--executable-path', '/usr/bin/chromium-browser');
         mcpArgs.push('--browser', 'chromium');
+        // Chromium cannot start its sandbox inside the container (no user namespaces
+        // for the non-root runtime user), so it must be disabled or the browser — and
+        // therefore the Playwright MCP — fails to launch.
+        mcpArgs.push('--no-sandbox');
       }
 
       const envVars: Record<string, string> = Object.fromEntries(

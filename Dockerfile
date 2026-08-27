@@ -61,7 +61,12 @@ RUN go install github.com/zricethezav/gitleaks/v8@latest || echo "gitleaks insta
 # Guarded so a failed optional install never breaks the build. nuclei templates are
 # pre-downloaded to a fixed dir the runner points at via NUCLEI_TEMPLATES_DIR.
 RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest || echo "nuclei install skipped (optional)"
-RUN mkdir -p /opt/nuclei-templates && (nuclei -ut -ud /opt/nuclei-templates -disable-update-check || echo "nuclei templates download skipped (optional)")
+# Install nuclei templates by cloning the repo directly. nuclei's own `-update-templates`
+# downloader fails silently in a minimal container (writes 0 files); a git clone is reliable
+# and world-readable so the non-root runtime user can read them.
+RUN git clone --depth 1 https://github.com/projectdiscovery/nuclei-templates.git /opt/nuclei-templates 2>/dev/null \
+    && chmod -R a+rX /opt/nuclei-templates \
+    || mkdir -p /opt/nuclei-templates
 RUN npm install -g retire || echo "retire install skipped (optional)"
 RUN git clone --depth 1 https://github.com/testssl/testssl.sh.git /opt/testssl 2>/dev/null || mkdir -p /opt/testssl
 
@@ -84,6 +89,7 @@ RUN apk update && apk add --no-cache \
     nodejs-22 \
     npm \
     python3 \
+    py3-pip \
     ruby \
     # Chromium browser and dependencies for Playwright
     chromium \
@@ -101,8 +107,10 @@ RUN apk update && apk add --no-cache \
     mesa-gbm \
     # Font rendering
     fontconfig \
-    # openssl for testssl.sh (deep TLS scanning)
-    openssl
+    # openssl + coreutils for testssl.sh (deep TLS scanning). testssl rejects busybox's
+    # `dd`/utilities, so GNU coreutils must be present or testssl aborts on startup.
+    openssl \
+    coreutils
 
 # Copy Go binaries from builder (subfinder + optional white-box scanners osv-scanner/gitleaks
 # + optional DAST scanner nuclei). Directory copy is resilient: it succeeds even if an
@@ -129,6 +137,14 @@ COPY --from=builder /usr/bin/schemathesis /usr/bin/
 
 # retire.js (client-side JS CVE scanner) — Node global in the runtime image.
 RUN npm install -g retire || echo "retire runtime install skipped (optional)"
+
+# Pre-install the Playwright MCP so agents don't pay a first-run `npx` download that can
+# time out the MCP connection on a cold image. Guarded so a failure can't break the build.
+RUN npm install -g @playwright/mcp@latest || echo "@playwright/mcp preinstall skipped (optional)"
+
+# semgrep (SAST / taint) — installed in the runtime stage because the builder's site-packages
+# copy does not carry semgrep's native core. Guarded so a failure can never break the build.
+RUN pip3 install --no-cache-dir --break-system-packages semgrep || echo "semgrep runtime install skipped (optional)"
 
 # Create non-root user for security
 RUN addgroup -g 1001 pentest && \
