@@ -27,7 +27,7 @@ const require = createRequire(import.meta.url);
 const addFormats: FormatsPlugin = require('ajv-formats');
 
 // Initialize AJV with formats
-const ajv = new Ajv({ allErrors: true, verbose: true });
+const ajv = new Ajv({ allErrors: true, verbose: true, allowUnionTypes: true });
 addFormats(ajv);
 
 // Load JSON Schema
@@ -378,13 +378,32 @@ const sanitizeCoverage = (coverage?: CoverageConfig): CoverageConfig => {
   }
 
   const mode = ((coverage.mode || 'precision').toLowerCase().trim() as 'precision' | 'coverage');
+  // include_whitebox may arrive as a string ("false") because the YAML loader uses
+  // FAILSAFE_SCHEMA (all scalars parsed as strings); coerce it to a real boolean so
+  // the disable switch works regardless. Absent -> undefined (defaults to enabled).
+  const includeWhitebox = coerceOptionalBool((coverage as { include_whitebox?: unknown }).include_whitebox);
+  const includeDast = coerceOptionalBool((coverage as { include_dast?: unknown }).include_dast);
   return {
     mode,
     ...(coverage.include_potential !== undefined && { include_potential: coverage.include_potential }),
     ...(coverage.include_headers_tls !== undefined && { include_headers_tls: coverage.include_headers_tls }),
     ...(coverage.include_sast_sca !== undefined && { include_sast_sca: coverage.include_sast_sca }),
+    ...(includeWhitebox !== undefined && { include_whitebox: includeWhitebox }),
+    ...(includeDast !== undefined && { include_dast: includeDast }),
     ...(coverage.max_findings !== undefined && { max_findings: coverage.max_findings }),
   };
+};
+
+// Coerce an optional flag that may be a boolean or a YAML-FAILSAFE string.
+// undefined/null -> undefined; "false"/"0"/"" -> false; everything else -> true.
+const coerceOptionalBool = (v: unknown): boolean | undefined => {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'string') {
+    const t = v.trim().toLowerCase();
+    return t !== 'false' && t !== '0' && t !== '';
+  }
+  return Boolean(v);
 };
 
 const sanitizeTargets = (targets?: string[]): string[] => {

@@ -69,6 +69,8 @@ import {
 } from '../utils/git-manager.js';
 import { assembleFinalReport, injectModelIntoReport } from '../phases/reporting.js';
 import { enrichFindings, renderAllReports } from '../reporting/orchestrate.js';
+import { runWhiteboxAnalysis, writeWhiteboxDeliverables } from '../whitebox/index.js';
+import { runDastAnalysis, writeDastDeliverables } from '../dast/index.js';
 import { getPromptNameForAgent } from '../types/agents.js';
 import { AuditSession } from '../audit/index.js';
 import type { WorkflowSummary } from '../audit/workflow-logger.js';
@@ -90,6 +92,7 @@ export interface ActivityInput {
   configPath?: string;
   outputPath?: string;
   pipelineTestingMode?: boolean;
+  noCodebase?: boolean;
   workflowId: string;
 }
 
@@ -118,6 +121,7 @@ async function runAgentActivity(
     configPath,
     outputPath,
     pipelineTestingMode = false,
+    noCodebase = false,
     workflowId,
   } = input;
 
@@ -160,7 +164,7 @@ async function runAgentActivity(
     const promptName = getPromptNameForAgent(agentName);
     const prompt = await loadPrompt(
       promptName,
-      { webUrl, repoPath, ...(subDir && { subDir }) },
+      { webUrl, repoPath, ...(subDir && { subDir }), noCodebase },
       distributedConfig,
       pipelineTestingMode
     );
@@ -490,7 +494,7 @@ export async function injectReportMetadataActivity(input: ActivityInput): Promis
  * Non-fatal: on failure the legacy Markdown report from runReportAgent remains.
  */
 export async function enrichFindingsActivity(input: ActivityInput): Promise<void> {
-  const { webUrl, repoPath, subDir, configPath, pipelineTestingMode = false } = input;
+  const { webUrl, repoPath, subDir, configPath, pipelineTestingMode = false, noCodebase = false } = input;
   console.log(chalk.blue('🧮 Enriching findings into findings.json...'));
   try {
     // Resolve config the same way runAgentActivity does, then load the prompt.
@@ -501,7 +505,7 @@ export async function enrichFindingsActivity(input: ActivityInput): Promise<void
     }
     const prompt = await loadPrompt(
       'report-enrich',
-      { webUrl, repoPath, ...(subDir && { subDir }) },
+      { webUrl, repoPath, ...(subDir && { subDir }), noCodebase },
       distributedConfig,
       pipelineTestingMode
     );
@@ -509,6 +513,121 @@ export async function enrichFindingsActivity(input: ActivityInput): Promise<void
   } catch (error) {
     const err = error as Error;
     console.log(chalk.yellow(`⚠️ Findings enrichment failed (non-fatal): ${err.message}`));
+  }
+}
+
+/**
+ * Deterministic white-box analysis (capabilities 1.1–1.7): runs off-the-shelf
+ * scanners (osv-scanner / gitleaks / semgrep) over the target source and folds a
+ * concise summary into pre_recon_deliverable.md so downstream LLM agents
+ * prioritise and validate the findings.
+ *
+ * Strictly additive and best-effort:
+ *  - skipped in black-box (noCodebase) and pipeline-testing modes,
+ *  - skipped when disabled via config (coverage.include_whitebox === false),
+ *  - skipped when no scanners are installed,
+ *  - NEVER throws — any failure is logged and the pipeline continues unaffected.
+ */
+export async function runWhiteboxAnalysisActivity(input: ActivityInput): Promise<void> {
+  const { repoPath, subDir, configPath, pipelineTestingMode = false, noCodebase = false } = input;
+
+  if (noCodebase) {
+    console.log(chalk.gray('    ⏭️ White-box analysis skipped (black-box / no-codebase run)'));
+    return;
+  }
+  if (pipelineTestingMode) {
+    console.log(chalk.gray('    ⏭️ White-box analysis skipped (pipeline testing mode)'));
+    return;
+  }
+
+  try {
+    // Resolve config the same way runAgentActivity does (best-effort).
+    let distributedConfig: DistributedConfig | null = null;
+    if (configPath) {
+      try {
+        distributedConfig = distributeConfig(await parseConfig(configPath));
+      } catch {
+        distributedConfig = null; // config problems must not block the white-box pass
+      }
+    }
+    const includeWhitebox = distributedConfig?.coverage?.include_whitebox ?? true;
+    if (!includeWhitebox) {
+      console.log(chalk.gray('    ⏭️ White-box analysis disabled (coverage.include_whitebox=false)'));
+      return;
+    }
+
+    console.log(chalk.blue('🔬 Running deterministic white-box analysis (SAST / SCA / dataflow)...'));
+    const analysis = await runWhiteboxAnalysis({
+      repoPath,
+      ...(subDir && { subDir }),
+      generatedAt: new Date().toISOString(),
+    });
+    if (!analysis) {
+      // No scanners installed or no source — nothing to write.
+      return;
+    }
+    await writeWhiteboxDeliverables(analysis, repoPath);
+    console.log(
+      chalk.green(
+        `    ✅ White-box analysis: ${analysis.cve.length} CVEs, ${analysis.secrets.length} secrets, ` +
+          `${analysis.taint.length} tainted flows, ${analysis.sast.length} sinks, ${analysis.authz.length} routes`
+      )
+    );
+  } catch (error) {
+    const err = error as Error;
+    console.log(chalk.yellow(`⚠️ White-box analysis failed (non-fatal): ${err.message}`));
+  }
+}
+
+/**
+ * Deterministic DAST analysis (Tier-2 ADD group): runs off-the-shelf scanners
+ * (nuclei / testssl.sh / retire.js) against the LIVE target and folds a concise
+ * summary into recon_deliverable.md so the vuln/exploit agents prioritise and
+ * validate the confirmed live signals.
+ *
+ * Strictly additive and best-effort. Unlike the white-box pass, DAST runs even
+ * in black-box (no-codebase) mode since it only needs the live URL. It is:
+ *  - skipped in pipeline-testing mode,
+ *  - skipped when disabled via config (coverage.include_dast === false),
+ *  - skipped when no scanners are installed,
+ *  - NEVER throws — any failure is logged and the pipeline continues unaffected.
+ */
+export async function runDastAnalysisActivity(input: ActivityInput): Promise<void> {
+  const { webUrl, configPath, repoPath, pipelineTestingMode = false } = input;
+
+  if (pipelineTestingMode) {
+    console.log(chalk.gray('    ⏭️ DAST analysis skipped (pipeline testing mode)'));
+    return;
+  }
+
+  try {
+    let distributedConfig: DistributedConfig | null = null;
+    if (configPath) {
+      try {
+        distributedConfig = distributeConfig(await parseConfig(configPath));
+      } catch {
+        distributedConfig = null; // config problems must not block the DAST pass
+      }
+    }
+    const includeDast = distributedConfig?.coverage?.include_dast ?? true;
+    if (!includeDast) {
+      console.log(chalk.gray('    ⏭️ DAST analysis disabled (coverage.include_dast=false)'));
+      return;
+    }
+
+    console.log(chalk.blue('🌐 Running deterministic DAST probes (nuclei / testssl / retire.js)...'));
+    const analysis = await runDastAnalysis({ target: webUrl, generatedAt: new Date().toISOString() });
+    if (!analysis) {
+      // Invalid target or no scanners installed — nothing to write.
+      return;
+    }
+    await writeDastDeliverables(analysis, repoPath);
+    console.log(
+      chalk.green(`    ✅ DAST analysis: ${analysis.findings.length} findings across ${analysis.findings.filter((f) => f.severity !== 'info').length} actionable`)
+    );
+  } catch (error) {
+    const err = error as Error;
+    console.log(chalk.yellow(`⚠️ DAST analysis failed (non-fatal): ${err.message}`));
   }
 }
 

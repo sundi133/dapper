@@ -122,6 +122,14 @@
           "type": "boolean",
           "description": "Include static code and dependency findings if available"
         },
+        "include_whitebox": {
+          "type": ["boolean", "string"],
+          "description": "Run the deterministic white-box pass (osv-scanner/gitleaks/semgrep) during pre-recon. Default: true. Accepts a boolean or the strings 'true'/'false'."
+        },
+        "include_dast": {
+          "type": ["boolean", "string"],
+          "description": "Run the deterministic DAST pass (nuclei/testssl.sh/retire.js) after recon. Default: true. Accepts a boolean or the strings 'true'/'false'."
+        },
         "max_findings": {
           "type": "integer",
           "minimum": 1,

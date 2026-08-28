@@ -15,7 +15,23 @@ interface PromptVariables {
   repoPath: string;
   subDir?: string;
   MCP_SERVER?: string;
+  noCodebase?: boolean;
 }
+
+// Injected at the top of every prompt when running without a target codebase.
+// Overrides the per-agent "MANDATORY source code analysis" instructions baked
+// into the prompt templates, since there is no repository to inspect.
+const NO_CODEBASE_NOTICE = `<no_codebase_override>
+**IMPORTANT: NO SOURCE CODE IS AVAILABLE FOR THIS ENGAGEMENT.**
+This is a black-box (URL-only) assessment. The working directory does NOT contain the target application's source code - it is an empty scratch workspace for your notes and deliverables only.
+
+- IGNORE any instruction below that mandates using the Task Agent (or Read/Glob/Grep) for "source code analysis," "code review," or reading the repository. There is no code to read.
+- Base ALL findings strictly on dynamic, black-box testing of the live application: browser interaction (Playwright MCP), HTTP requests/responses, observed behavior, headers, error messages, and public artifacts (robots.txt, sourcemaps, JS bundles served over the network, API responses, etc.).
+- If a required deliverable is normally derived from source code (e.g. a code analysis report), still produce and save it via the required tool, but base its content entirely on black-box reconnaissance and explicitly note that no source code was provided.
+- Do not fabricate file paths, line numbers, or code snippets. Never claim to have read source code.
+</no_codebase_override>
+
+`;
 
 interface IncludeReplacement {
   placeholder: string;
@@ -262,6 +278,11 @@ async function interpolateVariables(
       result = subDirInstruction + '\n' + result;
     }
 
+    // Prepend the no-codebase override banner for black-box (URL-only) runs
+    if (variables.noCodebase) {
+      result = NO_CODEBASE_NOTICE + result;
+    }
+
     // Validate that all placeholders have been replaced (excluding instructional text)
     const remainingPlaceholders = result.match(/\{\{[^}]+\}\}/g);
     if (remainingPlaceholders) {
@@ -294,11 +315,26 @@ export async function loadPrompt(
     // Use pipeline testing prompts if pipeline testing mode is enabled
     const baseDir = pipelineTestingMode ? 'prompts/pipeline-testing' : 'prompts';
     const promptsDir = path.join(import.meta.dirname, '..', '..', baseDir);
-    const promptPath = path.join(promptsDir, `${promptName}.txt`);
+    let promptPath = path.join(promptsDir, `${promptName}.txt`);
 
     // Debug message for pipeline testing mode
     if (pipelineTestingMode) {
       console.log(chalk.yellow(`⚡ Using pipeline testing prompt: ${promptPath}`));
+    }
+
+    // For black-box (no codebase) runs, prefer a dedicated black-box variant of the
+    // prompt if one exists - it replaces source-code-analysis instructions with
+    // proper black-box technique instead of just telling the agent to "ignore" them.
+    // Falls back to the standard prompt + override banner (below) when no variant exists.
+    let usedBlackboxVariant = false;
+    if (variables.noCodebase && !pipelineTestingMode) {
+      const blackboxDir = path.join(import.meta.dirname, '..', '..', 'prompts', 'blackbox');
+      const blackboxPath = path.join(blackboxDir, `${promptName}.txt`);
+      if (await fs.pathExists(blackboxPath)) {
+        promptPath = blackboxPath;
+        usedBlackboxVariant = true;
+        console.log(chalk.gray(`    🕶️  Using black-box prompt variant: ${promptName}`));
+      }
     }
 
     // Check if file exists first
@@ -313,6 +349,12 @@ export async function loadPrompt(
 
     // Add MCP server assignment to variables
     const enhancedVariables: PromptVariables = { ...variables };
+
+    // The black-box variant already speaks entirely in black-box terms - don't also
+    // stack the generic override banner on top of it.
+    if (usedBlackboxVariant) {
+      enhancedVariables.noCodebase = false;
+    }
 
     // Assign MCP server based on prompt name (agent name)
     const mcpServer = MCP_AGENT_MAPPING[promptName as keyof typeof MCP_AGENT_MAPPING];

@@ -138,6 +138,7 @@ export async function pentestPipelineWorkflow(
     ...(input.pipelineTestingMode !== undefined && {
       pipelineTestingMode: input.pipelineTestingMode,
     }),
+    ...(input.noCodebase !== undefined && { noCodebase: input.noCodebase }),
   };
 
   try {
@@ -149,6 +150,13 @@ export async function pentestPipelineWorkflow(
       await a.runPreReconAgent(activityInput);
     state.completedAgents.push('pre-recon');
     await a.logPhaseTransition(activityInput, 'pre-recon', 'complete');
+
+    // === Phase 1b: Deterministic White-Box Analysis (SAST / SCA / dataflow) ===
+    // Additive, best-effort: runs off-the-shelf scanners over the source and folds a
+    // summary into the pre-recon deliverables (code_analysis/pre_recon) that the
+    // threat-model/vuln/report agents ingest. The activity never throws (auto-skips in
+    // black-box/pipeline/disabled/no-tools cases), so this line cannot break the pipeline.
+    await a.runWhiteboxAnalysisActivity(activityInput);
 
     // === Phase 2: Threat Modeling ===
     state.currentPhase = 'pre-recon';
@@ -165,6 +173,14 @@ export async function pentestPipelineWorkflow(
     state.agentMetrics['recon'] = await a.runReconAgent(activityInput);
     state.completedAgents.push('recon');
     await a.logPhaseTransition(activityInput, 'recon', 'complete');
+
+    // === Phase 3b: Deterministic DAST probes (nuclei / testssl / retire.js) ===
+    // Additive, best-effort: runs off-the-shelf scanners against the live target and
+    // folds a summary into recon_deliverable.md so the vuln/exploit agents prioritise
+    // and validate the confirmed live signals. Runs in black-box mode too (only needs
+    // the URL). The activity never throws (auto-skips in pipeline/disabled/no-tools
+    // cases), so this line cannot break the pipeline.
+    await a.runDastAnalysisActivity(activityInput);
 
     // === Phases 3-4: Vulnerability Analysis + Exploitation (Pipelined) ===
     // Each vuln type runs as an independent pipeline:
